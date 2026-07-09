@@ -1,65 +1,226 @@
-import Image from "next/image";
+"use client"
+
+import { motion } from "framer-motion"
+import Link from "next/link"
+import { FadeIn, StaggerContainer, StaggerItem } from "@/components/layout/motion-wrapper"
+import { Button } from "@/components/ui/button"
+import {
+  Calendar,
+  Users,
+  Shuffle,
+  Trophy,
+  ArrowRight,
+  CheckCircle2,
+} from "lucide-react"
+
+const features = [
+  {
+    icon: Calendar,
+    title: "Organize Peladas",
+    description: "Crie peladas com data, local e limites personalizados em segundos.",
+  },
+  {
+    icon: Users,
+    title: "Gerencie Jogadores",
+    description: "Controle mensalistas, diaristas e lista de espera automaticamente.",
+  },
+  {
+    icon: Shuffle,
+    title: "Sorteio Inteligente",
+    description: "Sorteios equilibrados com modos personalizáveis e animados.",
+  },
+  {
+    icon: Trophy,
+    title: "Ranking e Histórico",
+    description: "Acompanhe o histórico de jogos e resultados das peladas.",
+  },
+]
+
+const steps = [
+  "Crie sua conta gratuita",
+  "Crie ou entre em uma pelada",
+  "Confirme presença no dia",
+  "Participe do sorteio dos times",
+]
 
 export default function Home() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="flex flex-col min-h-screen">
+      {/* Header */}
+      <header className="fixed top-0 left-0 right-0 z-50 glass">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">⚽</span>
+              <span className="text-xl font-bold bg-gradient-to-r from-primary to-blue-600 bg-clip-text text-transparent">
+                PeladaPro
+              </span>
+            </div>
+            <nav className="flex items-center gap-4">
+              <Link href="/auth/login">
+                <Button variant="ghost">Entrar</Button>
+              </Link>
+              <Link href="/auth/register">
+                <Button variant="gradient" size="sm">
+                  Cadastrar
+                </Button>
+              </Link>
+            </nav>
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+      </header>
+
+      {/* Hero Section */}
+      <section className="relative min-h-screen flex items-center justify-center overflow-hidden pt-16">
+        {/* Background gradient */}
+        <div className="absolute inset-0 bg-gradient-animated opacity-10" />
+
+        {/* Decorative circles */}
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/20 rounded-full blur-3xl" />
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-blue-600/20 rounded-full blur-3xl" />
+
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <FadeIn>
+            <motion.div
+              animate={{ rotate: [0, -10, 10, -10, 0] }}
+              transition={{ duration: 2, repeat: Infinity, repeatDelay: 4 }}
+              className="text-7xl mb-6"
+            >
+              ⚽
+            </motion.div>
+          </FadeIn>
+
+          <FadeIn delay={0.1}>
+            <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tight mb-6">
+              Organize suas{" "}
+              <span className="bg-gradient-to-r from-primary to-blue-600 bg-clip-text text-transparent">
+                Peladas
+              </span>{" "}
+              com Facilidade
+            </h1>
+          </FadeIn>
+
+          <FadeIn delay={0.2}>
+            <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto mb-8">
+              Crie peladas, convide amigos, confirme presença e sorteie times
+              equilibrados — tudo em um só lugar, de graça.
+            </p>
+          </FadeIn>
+
+          <FadeIn delay={0.3}>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+              <Link href="/auth/register">
+                <Button size="xl" variant="gradient">
+                  Começar Agora
+                  <ArrowRight className="ml-2 h-5 w-5" />
+                </Button>
+              </Link>
+              <Link href="/auth/login">
+                <Button size="xl" variant="outline">
+                  Já tenho conta
+                </Button>
+              </Link>
+            </div>
+          </FadeIn>
+
+          {/* Steps */}
+          <FadeIn delay={0.4}>
+            <div className="mt-16 grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-3xl mx-auto">
+              {steps.map((step, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.5 + i * 0.1 }}
+                  className="flex flex-col items-center gap-2 p-4 rounded-xl bg-muted/50"
+                >
+                  <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-sm font-bold">
+                    {i + 1}
+                  </div>
+                  <p className="text-sm text-center text-muted-foreground">{step}</p>
+                </motion.div>
+              ))}
+            </div>
+          </FadeIn>
         </div>
-      </main>
+      </section>
+
+      {/* Features Section */}
+      <section className="py-24 bg-muted/30">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <FadeIn>
+            <h2 className="text-3xl sm:text-4xl font-bold text-center mb-4">
+              Tudo que você precisa
+            </h2>
+            <p className="text-muted-foreground text-center mb-12 max-w-2xl mx-auto">
+              Ferramentas completas para organizar peladas de futebol como um profissional
+            </p>
+          </FadeIn>
+
+          <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {features.map((feature, i) => (
+              <StaggerItem key={i}>
+                <motion.div
+                  whileHover={{ y: -4 }}
+                  className="p-6 rounded-xl border border-border bg-background hover:shadow-lg transition-all duration-200"
+                >
+                  <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
+                    <feature.icon className="h-6 w-6 text-primary" />
+                  </div>
+                  <h3 className="font-semibold mb-2">{feature.title}</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {feature.description}
+                  </p>
+                </motion.div>
+              </StaggerItem>
+            ))}
+          </StaggerContainer>
+        </div>
+      </section>
+
+      {/* CTA Section */}
+      <section className="py-24">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <FadeIn>
+            <div className="p-12 rounded-2xl bg-gradient-to-br from-dark to-dark-light border border-primary/20">
+              <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">
+                Pronto para Organizar sua Pelada?
+              </h2>
+              <p className="text-white/70 mb-8 max-w-xl mx-auto">
+                Junte-se a centenas de jogadores que já usam o PeladaPro para
+                organizar suas partidas.
+              </p>
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                <Link href="/auth/register">
+                  <Button size="lg" variant="gradient" className="bg-gradient-to-r from-primary to-blue-600 text-white">
+                    Criar Conta Gratuita
+                    <ArrowRight className="ml-2 h-5 w-5" />
+                  </Button>
+                </Link>
+              </div>
+
+              <div className="mt-8 flex flex-wrap items-center justify-center gap-6 text-sm text-white/60">
+                <span className="flex items-center gap-1">
+                  <CheckCircle2 className="h-4 w-4 text-primary" /> Sem cartão de crédito
+                </span>
+                <span className="flex items-center gap-1">
+                  <CheckCircle2 className="h-4 w-4 text-primary" /> 100% gratuito
+                </span>
+                <span className="flex items-center gap-1">
+                  <CheckCircle2 className="h-4 w-4 text-primary" /> Deploy na Vercel
+                </span>
+              </div>
+            </div>
+          </FadeIn>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="border-t border-border py-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-sm text-muted-foreground">
+          <p>© {new Date().getFullYear()} PeladaPro. Feito com ⚽ para os amantes do futebol.</p>
+        </div>
+      </footer>
     </div>
-  );
+  )
 }
