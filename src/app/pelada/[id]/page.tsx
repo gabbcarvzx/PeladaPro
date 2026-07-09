@@ -51,6 +51,7 @@ import {
   UserPlus,
   ArrowUp,
   Zap,
+  Swords,
 } from "lucide-react"
 import type { Pelada, PeladaParticipante, ConfirmacaoDia, ListaEspera } from "@/types"
 import { BadgeStatus } from "@/components/ui/badge-status"
@@ -840,6 +841,29 @@ export default function PeladaDetailPage({ params }: Props) {
                         </Button>
                       </Link>
                     )}
+                  </div>
+                </div>
+              </FadeIn>
+
+              {/* Ao Vivo */}
+              <FadeIn delay={0.25}>
+                <div className="rounded-xl bg-[#1a1a1a] border border-[#2a2a2a]">
+                  <div className="p-6 pb-4">
+                    <h3 className="text-base font-semibold text-[#fafafa] flex items-center gap-2">
+                      <Swords className="h-5 w-5 text-[#00e676]" />
+                      Confrontos ao Vivo
+                    </h3>
+                  </div>
+                  <div className="px-6 pb-6 space-y-4">
+                    <p className="text-sm text-[#6b7280]">
+                      Acompanhe os confrontos entre os times sorteados, marque gols e veja quem leva a melhor.
+                    </p>
+                    <Link href={`/pelada/${pelada.id}/ao-vivo`}>
+                      <Button variant="glow" className="w-full">
+                        <Swords className="mr-2 h-4 w-4" />
+                        Ir para Ao Vivo
+                      </Button>
+                    </Link>
                   </div>
                 </div>
               </FadeIn>

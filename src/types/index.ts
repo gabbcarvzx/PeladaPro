@@ -87,3 +87,37 @@ export interface TimeSorteio {
     avatar_url: string | null
   }[]
 }
+
+export interface Confronto {
+  id: string
+  pelada_id: string
+  sorteio_id: string | null
+  time_a_nome: string
+  time_b_nome: string
+  time_a_jogadores: TimeSorteioJogador[]
+  time_b_jogadores: TimeSorteioJogador[]
+  placar_a: number
+  placar_b: number
+  status: "em_andamento" | "finalizado"
+  resultado: "time_a" | "time_b" | "empate" | null
+  fila_restante?: string
+  ordem: number
+  created_at: string
+  updated_at: string
+}
+
+export interface EventoConfronto {
+  id: string
+  confronto_id: string
+  jogador_id: string
+  tipo: "gol" | "assistencia"
+  time_id: "a" | "b"
+  created_at: string
+  profile?: Profile
+}
+
+export type TimeSorteioJogador = {
+  user_id: string
+  nome: string
+  avatar_url: string | null
+}

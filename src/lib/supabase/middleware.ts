@@ -34,7 +34,7 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const protectedPrefixes = ["/dashboard", "/pelada/create", "/pelada/join", "/pelada/sorteio"]
+  const protectedPrefixes = ["/dashboard", "/pelada/create", "/pelada/join", "/pelada/sorteio", "/pelada/ao-vivo"]
   // Protege qualquer rota /pelada/[id] ou /pelada/[id]/edit
   const isPeladaDynamic = /^\/pelada\/[^/]+(\/.*)?$/.test(request.nextUrl.pathname)
   const isProtectedPath = isPeladaDynamic || protectedPrefixes.some((path) =>
