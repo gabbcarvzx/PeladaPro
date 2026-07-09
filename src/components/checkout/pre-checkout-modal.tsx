@@ -193,8 +193,9 @@ export function PreCheckoutModal({
         throw new Error(data.error || "Erro ao criar assinatura")
       }
 
-      if (data.url) {
-        window.location.href = data.url
+      if (data.invoiceUrl) {
+        // Redireciona para o link de pagamento da cobrança (boleto/PIX/cartão)
+        window.location.href = data.invoiceUrl
       } else {
         throw new Error("URL de pagamento não recebida")
       }

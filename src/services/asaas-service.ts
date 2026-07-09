@@ -1,5 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
-import { createAsaasCustomer, updateAsaasCustomer, findAsaasCustomerByEmail, createAsaasSubscription, createAsaasCheckout, cancelAsaasSubscription } from "@/lib/asaas"
+import {
+  createAsaasCustomer,
+  updateAsaasCustomer,
+  createAsaasSubscription,
+  getAsaasSubscriptionPayments,
+} from "@/lib/asaas"
 import { SubscriptionService } from "./subscription-service"
 
 export class AsaasService {
@@ -13,8 +18,15 @@ export class AsaasService {
 
   /**
    * Cria ou busca o customer Asaas e retorna o ID.
+   * Sempre envia cpfCnpj — a API Asaas exige.
    */
-  async getOrCreateCustomer(userId: string, userEmail: string, userName: string, cpfCnpj: string, phone: string): Promise<string> {
+  async getOrCreateCustomer(
+    userId: string,
+    userEmail: string,
+    userName: string,
+    cpfCnpj: string,
+    mobilePhone: string,
+  ): Promise<string> {
     const { data: profile } = await this.supabase
       .from("profiles")
       .select("asaas_customer_id")
@@ -24,12 +36,12 @@ export class AsaasService {
     let customerId = (profile as any)?.asaas_customer_id
 
     if (!customerId) {
-      // Cria customer NOVO com CPF/CNPJ obrigatório
+      // Customer novo — cria com CPF obrigatório
       const customer = await createAsaasCustomer({
         name: userName,
         email: userEmail,
         cpfCnpj,
-        phone,
+        mobilePhone,
       })
       customerId = customer.id
 
@@ -38,16 +50,16 @@ export class AsaasService {
         .update({ asaas_customer_id: customerId })
         .eq("id", userId)
     } else if (cpfCnpj) {
-      // Customer já existe — atualiza com CPF/CNPJ (pode ter sido criado SEM CPF)
+      // Customer já existe — atualiza CPF (pode ter sido criado sem)
       try {
-        await updateAsaasCustomer(customerId, { cpfCnpj, phone })
+        await updateAsaasCustomer(customerId, { cpfCnpj, mobilePhone })
       } catch {
-        // Se falhar, tenta criar novo customer (customer pode ter sido deletado no Asaas)
+        // Fallback: se customer foi deletado no Asaas, cria novo
         const customer = await createAsaasCustomer({
           name: userName,
           email: userEmail,
           cpfCnpj,
-          phone,
+          mobilePhone,
         })
         customerId = customer.id
 
@@ -62,39 +74,52 @@ export class AsaasService {
   }
 
   /**
-   * Cria assinatura no Asaas e no banco, retorna URL do checkout.
+   * Cria assinatura no Asaas e no banco, retorna invoiceUrl para pagamento.
+   *
+   * Fluxo correto (sem /checkout):
+   * 1. Cria subscription → Asaas gera 1ª cobrança automaticamente
+   * 2. Busca os payments da subscription
+   * 3. Retorna invoiceUrl da 1ª cobrança
    */
-  async createSubscriptionAndCheckout(userId: string, customerId: string): Promise<string> {
-    let subscriptionId: string
+  async createSubscriptionAndGetPaymentUrl(
+    userId: string,
+    customerId: string,
+  ): Promise<string> {
+    // 1. Verifica se já tem subscription ativa
     const existing = await this.subscriptionService.getSubscription(userId)
+    let subscriptionId: string
 
     if (existing?.asaas_subscription_id) {
       subscriptionId = existing.asaas_subscription_id
     } else {
+      // Cria nova subscription no Asaas
       const asaasSub = await createAsaasSubscription({
-        customerId,
+        customer: customerId,
         value: 30.0,
         description: "PeladaPro - Plano Mensal",
-        billingType: "PIX",
+        billingType: "BOLETO",
+        cycle: "MONTHLY",
       })
       subscriptionId = asaasSub.id
     }
 
+    // 2. Upsert subscription no banco
     const now = new Date().toISOString()
     const graceDate = new Date(Date.now() + 33 * 24 * 60 * 60 * 1000).toISOString()
 
-    await this.supabase.from("subscriptions").upsert({
-      user_id: userId,
-      asaas_customer_id: customerId,
-      asaas_subscription_id: subscriptionId,
-      status: "pending",
-      plan_price: 30.0,
-      current_period_start: now,
-      current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-      grace_until: graceDate,
-    }, {
-      onConflict: "user_id",
-    })
+    await this.supabase.from("subscriptions").upsert(
+      {
+        user_id: userId,
+        asaas_customer_id: customerId,
+        asaas_subscription_id: subscriptionId,
+        status: "pending",
+        plan_price: 30.0,
+        current_period_start: now,
+        current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        grace_until: graceDate,
+      },
+      { onConflict: "user_id" },
+    )
 
     await this.supabase
       .from("profiles")
@@ -104,11 +129,17 @@ export class AsaasService {
       })
       .eq("id", userId)
 
-    const { url } = await createAsaasCheckout({
-      subscriptionId,
-      redirectUrl: `${process.env.NEXT_PUBLIC_APP_URL || ""}/dashboard`,
-    })
+    // 3. Busca a 1ª cobrança gerada pela subscription (contém invoiceUrl)
+    const payments = await getAsaasSubscriptionPayments(subscriptionId, 1)
+    if (payments.length === 0) {
+      throw new Error("Nenhuma cobrança foi gerada para esta assinatura.")
+    }
 
-    return url
+    const invoiceUrl = payments[0].invoiceUrl
+    if (!invoiceUrl) {
+      throw new Error("URL de pagamento não disponível. Tente novamente.")
+    }
+
+    return invoiceUrl
   }
 }
