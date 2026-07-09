@@ -280,7 +280,7 @@ export default function PeladaDetailPage({ params }: Props) {
       {/* Header */}
       <header className="glass sticky top-0 z-50 border-b border-border">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
+          <div className="flex items-center justify-between h-[72px]">
             <div className="flex items-center gap-3">
               <Link href="/dashboard">
                 <Button variant="ghost" size="icon">

@@ -4,37 +4,36 @@ import { cn } from "@/lib/utils"
 
 interface LogoProps {
   className?: string
-  link?: string
-  size?: "sm" | "md"
+  href?: string
 }
 
-const sizeConfig = {
-  sm: { width: 28, height: 28 },
-  md: { width: 32, height: 32 },
-}
-
-export function Logo({ className, link, size = "md" }: LogoProps) {
+export function Logo({ className, href }: LogoProps) {
   const img = (
     <Image
       src="/logo.png"
       alt="PeladaPro"
-      width={sizeConfig[size].width}
-      height={sizeConfig[size].height}
+      width={100}
+      height={48}
+      sizes="(max-width: 768px) 40px, 48px"
       className={cn(
-        "object-contain transition-opacity duration-200 hover:opacity-90",
+        "h-10 md:h-12 w-auto object-contain transition-opacity duration-200 hover:opacity-90",
         className,
       )}
       priority
     />
   )
 
-  if (link) {
+  if (href) {
     return (
-      <Link href={link} className="flex items-center">
+      <Link href={href} className="flex items-center shrink-0">
         {img}
       </Link>
     )
   }
 
-  return img
+  return (
+    <div className="flex items-center shrink-0">
+      {img}
+    </div>
+  )
 }

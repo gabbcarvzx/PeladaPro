@@ -50,10 +50,8 @@ export default function Home() {
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-50 glass">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <Link href="/" className="flex items-center">
-              <Logo size="sm" />
-            </Link>
+          <div className="flex items-center justify-between h-[72px]">
+            <Logo href="/" />
             <nav className="flex items-center gap-4">
               <Link href="/auth/login">
                 <Button variant="ghost">Entrar</Button>
