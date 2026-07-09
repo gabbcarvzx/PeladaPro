@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
-import type { Subscription, Pelada } from "@/types"
+import type { Pelada } from "@/types"
 
 export class SubscriptionService {
   private supabase: SupabaseClient
@@ -13,30 +13,31 @@ export class SubscriptionService {
   // ==========================================
 
   /**
-   * Verifica se o usuário tem uma assinatura ativa (considerando grace period)
+   * Verifica se o usuário tem uma assinatura ativa.
+   * Regra simples: status = 'active' AND now() < expires_at
    */
   async hasActiveSubscription(userId: string): Promise<boolean> {
     const { data } = await this.supabase.rpc("can_create_pelada", {
       p_user_id: userId,
     })
+    if (!data) {
+      // Se o RPC negou, verifica se precisa bloquear peladas
+      await this.checkAndBlockIfExpired(userId)
+    }
     return data === true
   }
 
-  /**
-   * Verifica se o usuário pode gerenciar uma pelada específica
-   * (admin + assinatura ativa + pelada não bloqueada)
-   */
   async canManagePelada(userId: string, peladaId: string): Promise<boolean> {
     const { data } = await this.supabase.rpc("can_manage_pelada", {
       p_user_id: userId,
       p_pelada_id: peladaId,
     })
+    if (!data) {
+      await this.checkAndBlockIfExpired(userId)
+    }
     return data === true
   }
 
-  /**
-   * Lança erro se o usuário não puder criar pelada
-   */
   async assertCanCreatePelada(userId: string): Promise<void> {
     const allowed = await this.hasActiveSubscription(userId)
     if (!allowed) {
@@ -47,9 +48,6 @@ export class SubscriptionService {
     }
   }
 
-  /**
-   * Lança erro se o usuário não puder gerenciar a pelada
-   */
   async assertCanManagePelada(userId: string, peladaId: string): Promise<void> {
     const allowed = await this.canManagePelada(userId, peladaId)
     if (!allowed) {
@@ -61,75 +59,44 @@ export class SubscriptionService {
   }
 
   // ==========================================
-  // ASSINATURA
+  // BLOQUEIO/DESBLOQUEIO
   // ==========================================
 
-  /**
-   * Busca a assinatura do usuário
-   */
-  async getSubscription(userId: string): Promise<Subscription | null> {
-    const { data } = await this.supabase
-      .from("subscriptions")
-      .select("*")
-      .eq("user_id", userId)
-      .maybeSingle()
+  async blockCreatorPeladas(userId: string): Promise<void> {
+    await this.supabase.rpc("block_creator_peladas", { p_user_id: userId })
+  }
 
-    return data as Subscription | null
+  async unblockCreatorPeladas(userId: string): Promise<void> {
+    await this.supabase.rpc("unblock_creator_peladas", { p_user_id: userId })
   }
 
   /**
-   * Retorna o status da assinatura do usuário a partir do profile
+   * Verifica se a assinatura expirou e bloqueia as peladas se necessário.
+   * Deve ser chamada sempre que o usuário tentar uma ação administrativa.
    */
-  async getUserSubscriptionStatus(userId: string): Promise<{
-    status: string
-    graceUntil: string | null
-  }> {
-    const { data } = await this.supabase
-      .from("profiles")
-      .select("subscription_status, subscription_grace_until")
-      .eq("id", userId)
-      .single()
+  async checkAndBlockIfExpired(userId: string): Promise<void> {
+    const details = await this.getSubscriptionDetails(userId)
 
-    return {
-      status: (data as any)?.subscription_status || "none",
-      graceUntil: (data as any)?.subscription_grace_until || null,
+    if (details.status === "active" && details.diasRestantes <= 0) {
+      console.log(`[SUB] Assinatura expirada para ${userId} — bloqueando peladas`)
+      await this.supabase
+        .from("profiles")
+        .update({ subscription_status: "expired" })
+        .eq("id", userId)
+
+      await this.blockCreatorPeladas(userId)
     }
   }
 
-  /**
-   * Bloqueia todas as peladas de um criador
-   */
-  async blockCreatorPeladas(userId: string): Promise<void> {
-    await this.supabase.rpc("block_creator_peladas", {
-      p_user_id: userId,
-    })
-  }
-
-  /**
-   * Desbloqueia todas as peladas de um criador
-   */
-  async unblockCreatorPeladas(userId: string): Promise<void> {
-    await this.supabase.rpc("unblock_creator_peladas", {
-      p_user_id: userId,
-    })
-  }
-
-  /**
-   * Verifica se uma pelada está bloqueada
-   */
   async isPeladaBlocked(peladaId: string): Promise<boolean> {
     const { data } = await this.supabase
       .from("peladas")
       .select("is_blocked")
       .eq("id", peladaId)
       .single()
-
     return (data as any)?.is_blocked === true
   }
 
-  /**
-   * Busca informações de bloqueio de uma pelada
-   */
   async getPeladaBlockInfo(peladaId: string): Promise<{
     isBlocked: boolean
     blockedReason: string | null
@@ -149,52 +116,79 @@ export class SubscriptionService {
     }
   }
 
+  // ==========================================
+  // DADOS DA ASSINATURA
+  // ==========================================
+
   /**
-   * Busca dados completos da assinatura + profile para exibição
+   * Busca dados completos da assinatura para exibição na UI.
    */
   async getSubscriptionDetails(userId: string): Promise<{
     status: string
+    expiresAt: string | null
     graceUntil: string | null
-    currentPeriodEnd: string | null
     lastPaymentAt: string | null
     planPrice: number
     diasRestantes: number
   }> {
-    const [subResult, profileResult] = await Promise.all([
-      this.supabase
-        .from("subscriptions")
-        .select("status, current_period_end, grace_until, last_payment_at, plan_price")
-        .eq("user_id", userId)
-        .maybeSingle(),
-      this.supabase
-        .from("profiles")
-        .select("subscription_status, subscription_grace_until")
-        .eq("id", userId)
-        .single(),
-    ])
+    const { data: profile } = await this.supabase
+      .from("profiles")
+      .select("subscription_status, subscription_expires_at, subscription_grace_until")
+      .eq("id", userId)
+      .single()
 
-    const sub = subResult.data as any
-    const profile = profileResult.data as any
+    const p = profile as any
+    const status = p?.subscription_status || "none"
+    const expiresAt = p?.subscription_expires_at || null
+    const graceUntil = p?.subscription_grace_until || null
 
-    const status = sub?.status || profile?.subscription_status || "none"
-    const graceUntil = sub?.grace_until || profile?.subscription_grace_until || null
-    const currentPeriodEnd = sub?.current_period_end || null
-    const lastPaymentAt = sub?.last_payment_at || null
-    const planPrice = sub?.plan_price || 30.0
+    // Último pagamento na tabela payments
+    const { data: lastPayment } = await this.supabase
+      .from("payments")
+      .select("paid_at")
+      .eq("user_id", userId)
+      .order("paid_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    // Dias restantes: calcula a partir de expires_at (se ativo) ou grace_until (se tolerância)
+    let diasRestantes = 0
+    if (status === "active" && expiresAt) {
+      diasRestantes = SubscriptionService.getDiasRestantes(expiresAt)
+    } else if (status === "past_due" && graceUntil) {
+      diasRestantes = SubscriptionService.getDiasRestantes(graceUntil)
+    }
 
     return {
       status,
+      expiresAt,
       graceUntil,
-      currentPeriodEnd,
-      lastPaymentAt,
-      planPrice,
-      diasRestantes: SubscriptionService.getDiasRestantes(graceUntil),
+      lastPaymentAt: (lastPayment as any)?.paid_at || null,
+      planPrice: 30.0,
+      diasRestantes,
     }
   }
 
-  /**
-   * Formata data ISO para exibição (pt-BR)
-   */
+  async getUserSubscriptionStatus(userId: string): Promise<{
+    status: string
+    graceUntil: string | null
+  }> {
+    const { data } = await this.supabase
+      .from("profiles")
+      .select("subscription_status, subscription_grace_until")
+      .eq("id", userId)
+      .single()
+
+    return {
+      status: (data as any)?.subscription_status || "none",
+      graceUntil: (data as any)?.subscription_grace_until || null,
+    }
+  }
+
+  // ==========================================
+  // UTILITÁRIOS
+  // ==========================================
+
   static formatarData(isoString: string | null): string {
     if (!isoString) return "—"
     try {
@@ -208,20 +202,14 @@ export class SubscriptionService {
     }
   }
 
-  /**
-   * Calcula dias restantes de tolerância
-   */
-  static getDiasRestantes(graceUntil: string | null): number {
-    if (!graceUntil) return 0
-    const grace = new Date(graceUntil).getTime()
+  static getDiasRestantes(dateStr: string | null): number {
+    if (!dateStr) return 0
+    const date = new Date(dateStr).getTime()
     const agora = Date.now()
-    const diff = grace - agora
+    const diff = date - agora
     return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)))
   }
 
-  /**
-   * Formata status da assinatura para exibição
-   */
   static formatarStatus(status: string): string {
     const map: Record<string, string> = {
       none: "Sem assinatura",

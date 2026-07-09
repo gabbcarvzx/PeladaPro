@@ -72,7 +72,7 @@ export default function DashboardPage() {
     const details = await subService.getSubscriptionDetails(user.id)
     setSubStatus(details.status)
     setDiasTolerancia(details.diasRestantes)
-    setSubExpiraEm(details.currentPeriodEnd)
+    setSubExpiraEm(details.expiresAt)
   }
 
   const handleLogout = async () => {

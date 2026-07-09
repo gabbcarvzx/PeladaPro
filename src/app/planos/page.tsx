@@ -24,7 +24,6 @@ import {
   CreditCard,
   Calendar,
   Clock,
-  AlertTriangle,
   XCircle,
   RefreshCw,
 } from "lucide-react"
@@ -35,13 +34,12 @@ export default function PlanosPage() {
   const { supabase, user, profile, loading: authLoading } = useSupabase()
   const subscriptionService = new SubscriptionService(supabase)
   const [subStatus, setSubStatus] = useState<string>("none")
-  const [graceUntil, setGraceUntil] = useState<string | null>(null)
   const [loadingSub, setLoadingSub] = useState(true)
   const [showPreCheckout, setShowPreCheckout] = useState(false)
   const [subDetails, setSubDetails] = useState<{
     status: string
+    expiresAt: string | null
     graceUntil: string | null
-    currentPeriodEnd: string | null
     lastPaymentAt: string | null
     planPrice: number
     diasRestantes: number
@@ -62,7 +60,6 @@ export default function PlanosPage() {
     const details = await subscriptionService.getSubscriptionDetails(user!.id)
     setSubDetails(details)
     setSubStatus(details.status)
-    setGraceUntil(details.graceUntil)
     setLoadingSub(false)
   }
 
@@ -72,8 +69,10 @@ export default function PlanosPage() {
     setShowPreCheckout(true)
   }
 
-  const isActive = subStatus === "active" || (subStatus === "past_due" && SubscriptionService.getDiasRestantes(graceUntil) > 0)
-  const diasTolerancia = subStatus === "past_due" ? SubscriptionService.getDiasRestantes(graceUntil) : 0
+  // Com o fluxo simplificado (expires_at), o usuario esta ativo se status = active e tem dias restantes
+  const diasRestantes = subDetails ? subDetails.diasRestantes : 0
+  const isActive = subStatus === "active" && diasRestantes > 0
+  const isExpired = subStatus === "active" && diasRestantes <= 0
 
   if (authLoading || loadingSub) {
     return (
@@ -122,17 +121,15 @@ export default function PlanosPage() {
           </FadeIn>
 
           {/* Status Atual — Card Detalhado */}
-          {(isActive || subStatus === "past_due" || subStatus === "pending" || subStatus === "canceled") && subDetails && (
+          {(isActive || isExpired || subStatus === "pending" || subStatus === "canceled") && subDetails && (
             <FadeIn delay={0.1}>
               <div className={`max-w-lg mx-auto mb-8 p-6 rounded-2xl border ${
                 isActive
                   ? "bg-[#00e676]/5 border-[#00e676]/20"
+                  : isExpired
+                  ? "bg-[#ff5252]/5 border-[#ff5252]/20"
                   : subStatus === "pending"
                   ? "bg-[#ffab00]/5 border-[#ffab00]/20"
-                  : subStatus === "past_due"
-                  ? diasTolerancia > 0
-                    ? "bg-[#ffab00]/5 border-[#ffab00]/20"
-                    : "bg-[#ff5252]/5 border-[#ff5252]/20"
                   : "bg-[#ff5252]/5 border-[#ff5252]/20"
               }`}>
                 <div className="text-center mb-4">
@@ -159,51 +156,46 @@ export default function PlanosPage() {
                   <h2 className={`text-xl font-bold mb-1 ${
                     isActive ? "text-[#fafafa]" : "text-[#ffab00]"
                   }`}>
-                    {isActive && "Assinatura Ativa 🎉"}
+                    {isActive && `Assinatura Ativa 🎉`}
+                    {isExpired && "Assinatura Expirada ❌"}
                     {subStatus === "pending" && "Pagamento Pendente ⏳"}
-                    {subStatus === "past_due" && diasTolerancia > 0 && "Em tolerância ⚠️"}
-                    {subStatus === "past_due" && diasTolerancia <= 0 && "Assinatura Vencida ❌"}
                     {subStatus === "canceled" && "Assinatura Cancelada"}
                   </h2>
+                  <p className="text-sm text-muted-foreground">
+                    {isActive && diasRestantes > 0
+                      ? `Expira em ${diasRestantes} dia${diasRestantes > 1 ? "s" : ""}`
+                      : isExpired
+                      ? "Sua assinatura expirou. Faça um novo pagamento para reativar."
+                      : subStatus === "pending"
+                      ? "Aguardando confirmação do pagamento..."
+                      : "Assinatura cancelada."}
+                  </p>
                 </div>
 
                 {/* Detalhes */}
                 <div className="space-y-3">
                   {/* Vigente até */}
-                  {subDetails.currentPeriodEnd && (
+                  {subDetails.expiresAt && isActive && (
                     <div className="flex items-center justify-between p-3 rounded-lg bg-[#121212] border border-[#2a2a2a]">
                       <span className="flex items-center gap-2 text-sm text-[#6b7280]">
                         <Calendar className="h-4 w-4" />
                         Vigente até
                       </span>
                       <span className="text-sm font-medium text-[#fafafa]">
-                        {SubscriptionService.formatarData(subDetails.currentPeriodEnd)}
+                        {SubscriptionService.formatarData(subDetails.expiresAt)}
                       </span>
                     </div>
                   )}
 
-                  {/* Próxima cobrança */}
-                  {isActive && subDetails.currentPeriodEnd && (
+                  {/* Próxima renovação */}
+                  {isActive && subDetails.expiresAt && (
                     <div className="flex items-center justify-between p-3 rounded-lg bg-[#121212] border border-[#2a2a2a]">
                       <span className="flex items-center gap-2 text-sm text-[#6b7280]">
                         <RefreshCw className="h-4 w-4" />
-                        Próxima cobrança
+                        Renovar em
                       </span>
                       <span className="text-sm font-medium text-[#fafafa]">
-                        {SubscriptionService.formatarData(subDetails.currentPeriodEnd)}
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Tolerância */}
-                  {diasTolerancia > 0 && (
-                    <div className="flex items-center justify-between p-3 rounded-lg bg-[#ffab00]/5 border border-[#ffab00]/20">
-                      <span className="flex items-center gap-2 text-sm text-[#ffab00]">
-                        <AlertTriangle className="h-4 w-4" />
-                        Fim da tolerância
-                      </span>
-                      <span className="text-sm font-bold text-[#ffab00]">
-                        {diasTolerancia} dia{diasTolerancia > 1 ? "s" : ""}
+                        {SubscriptionService.formatarData(subDetails.expiresAt)}
                       </span>
                     </div>
                   )}
@@ -234,26 +226,10 @@ export default function PlanosPage() {
                 </div>
 
                 {/* Status badges */}
-                {subStatus === "past_due" && diasTolerancia > 0 && (
-                  <div className="mt-4 text-center">
-                    <p className="text-sm text-muted-foreground mb-3">
-                      Você ainda pode administrar suas peladas durante a tolerância.
-                      Após o prazo, o acesso administrativo será bloqueado.
-                    </p>
-                    <Link href="/planos">
-                      <Button variant="glow" size="sm">
-                        <CreditCard className="mr-2 h-4 w-4" />
-                        Regularizar agora
-                      </Button>
-                    </Link>
-                  </div>
-                )}
-
-                {subStatus === "past_due" && diasTolerancia <= 0 && (
+                {isExpired && (
                   <div className="mt-4 text-center">
                     <p className="text-sm text-[#ff5252]/80 mb-3">
-                      Sua assinatura expirou e o acesso administrativo foi bloqueado.
-                      Faça um novo pagamento para reativar.
+                      Sua assinatura expirou. Faça um novo pagamento para reativar o acesso administrativo.
                     </p>
                     <Link href="/planos">
                       <Button variant="glow" size="sm">

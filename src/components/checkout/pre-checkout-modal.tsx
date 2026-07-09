@@ -177,7 +177,7 @@ export function PreCheckoutModal({
       const docLimpo = documento.replace(/\D/g, "")
       const telLimpo = telefone.replace(/\D/g, "")
 
-      const response = await fetch("/api/asaas/create-subscription", {
+      const response = await fetch("/api/asaas/create-payment", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
