@@ -164,6 +164,16 @@ export class PeladaService {
    * Atualiza uma pelada
    */
   async update(peladaId: string, updates: Partial<Pelada>): Promise<Pelada | null> {
+    // Proteção: verifica se o admin tem assinatura ativa
+    const subService = new SubscriptionService(this.supabase)
+    const { data: pelada } = await this.supabase
+      .from("peladas")
+      .select("admin_id")
+      .eq("id", peladaId)
+      .single()
+    if (!pelada) return null
+    await subService.assertCanManagePelada((pelada as any).admin_id, peladaId)
+
     const { data } = await this.supabase
       .from("peladas")
       .update(updates)
@@ -199,6 +209,17 @@ export class PeladaService {
    * sem verificar limite de jogadores.
    */
   async adminPromoverDaFila(peladaId: string, userId: string, dataJogo: string): Promise<boolean> {
+    // Proteção: verifica se o admin tem assinatura ativa
+    const subService = new SubscriptionService(this.supabase)
+    const { data: pelada } = await this.supabase
+      .from("peladas")
+      .select("admin_id")
+      .eq("id", peladaId)
+      .single()
+
+    if (!pelada) return false
+    const adminId = (pelada as any).admin_id
+    await subService.assertCanManagePelada(adminId, peladaId)
     // Remove da lista de espera
     const { error: deleteError } = await this.supabase
       .from("lista_espera")
@@ -285,6 +306,17 @@ export class PeladaService {
    * Remove participante de uma pelada
    */
   async removeParticipante(peladaId: string, userId: string): Promise<void> {
+    // Proteção: verifica se o admin tem assinatura ativa
+    const subService = new SubscriptionService(this.supabase)
+    const { data: pelada } = await this.supabase
+      .from("peladas")
+      .select("admin_id")
+      .eq("id", peladaId)
+      .single()
+    if (pelada) {
+      await subService.assertCanManagePelada((pelada as any).admin_id, peladaId)
+    }
+
     await this.supabase
       .from("pelada_participantes")
       .delete()
@@ -296,6 +328,17 @@ export class PeladaService {
    * Altera o tipo do jogador (mensalista/diarista)
    */
   async alterarTipoJogador(peladaId: string, userId: string, tipo: "mensalista" | "diarista"): Promise<void> {
+    // Proteção: verifica se o admin tem assinatura ativa
+    const subService = new SubscriptionService(this.supabase)
+    const { data: pelada } = await this.supabase
+      .from("peladas")
+      .select("admin_id")
+      .eq("id", peladaId)
+      .single()
+    if (pelada) {
+      await subService.assertCanManagePelada((pelada as any).admin_id, peladaId)
+    }
+
     await this.supabase
       .from("pelada_participantes")
       .update({ tipo })
@@ -459,6 +502,18 @@ export class PeladaService {
    * Admin confirma chegada do jogador
    */
   async confirmarChegada(peladaId: string, userId: string, dataJogo: string, ordem: number): Promise<void> {
+    // Proteção: verifica se o admin tem assinatura ativa
+    const subService = new SubscriptionService(this.supabase)
+    const { data: pelada } = await this.supabase
+      .from("peladas")
+      .select("admin_id")
+      .eq("id", peladaId)
+      .single()
+
+    if (!pelada) throw new Error("Pelada não encontrada")
+    const adminId = (pelada as any).admin_id
+    await subService.assertCanManagePelada(adminId, peladaId)
+
     await this.supabase
       .from("confirmacoes_dia")
       .update({ status: "confirmado", ordem_chegada: ordem })
@@ -558,6 +613,18 @@ export class PeladaService {
     jogadoresPorTime: number,
     ocorrenciaId?: string,
   ): Promise<HistoricoSorteio | null> {
+    // Proteção: verifica se o admin tem assinatura ativa
+    const subService = new SubscriptionService(this.supabase)
+    const { data: pelada } = await this.supabase
+      .from("peladas")
+      .select("admin_id")
+      .eq("id", peladaId)
+      .single()
+
+    if (!pelada) throw new Error("Pelada não encontrada")
+    const adminId = (pelada as any).admin_id
+    await subService.assertCanManagePelada(adminId, peladaId)
+
     const times = this.gerarTimes(participantes, modo, numeroTimes, jogadoresPorTime)
 
     const { data } = await this.supabase

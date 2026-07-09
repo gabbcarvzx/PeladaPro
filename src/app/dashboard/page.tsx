@@ -23,6 +23,8 @@ import {
   Copy,
   Settings2,
   Sparkles,
+  CreditCard,
+  CheckCircle2,
 } from "lucide-react"
 import { Avatar, AvatarImage } from "@/components/ui/avatar"
 import { AvatarPlaceholder } from "@/components/ui/avatar-placeholder"
@@ -30,6 +32,7 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { BadgeStatus } from "@/components/ui/badge-status"
 import { AuthService } from "@/services/auth-service"
 import { PeladaService } from "@/services/pelada-service"
+import { SubscriptionService } from "@/services/subscription-service"
 import { ThemeToggle } from "@/components/layout/theme-toggle"
 import type { Pelada } from "@/types"
 
@@ -39,6 +42,8 @@ export default function DashboardPage() {
   const peladaService = new PeladaService(supabase)
   const [peladas, setPeladas] = useState<Pelada[]>([])
   const [loadingPeladas, setLoadingPeladas] = useState(true)
+  const [subStatus, setSubStatus] = useState<string>("none")
+  const [diasTolerancia, setDiasTolerancia] = useState(0)
 
   useEffect(() => {
     if (!loading && !user) {
@@ -49,6 +54,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (user) {
       loadPeladas()
+      loadSubscription()
     }
   }, [user])
 
@@ -59,6 +65,14 @@ export default function DashboardPage() {
     setLoadingPeladas(false)
   }
 
+  const loadSubscription = async () => {
+    if (!user) return
+    const subService = new SubscriptionService(supabase)
+    const { status, graceUntil } = await subService.getUserSubscriptionStatus(user.id)
+    setSubStatus(status)
+    setDiasTolerancia(SubscriptionService.getDiasRestantes(graceUntil))
+  }
+
   const handleLogout = async () => {
     const authService = new AuthService(supabase)
     await authService.logout()
@@ -66,7 +80,7 @@ export default function DashboardPage() {
   }
 
   const copyInviteLink = (pelada: Pelada) => {
-    const link = `${window.location.origin}/pelada/join/${pelada.link_convite}`
+    const link = `${window.location.origin}/pelada/entrar/${pelada.invite_code}`
     navigator.clipboard.writeText(link)
     toast({
       title: "Link copiado!",
@@ -92,6 +106,34 @@ export default function DashboardPage() {
             <Logo />
 
             <div className="flex items-center gap-1">
+              {subStatus !== "none" && (
+                <Link href="/planos">
+                  <Button variant="ghost" size="sm" className={`gap-1.5 text-xs ${
+                    subStatus === "active" ? "text-[#00e676]" : "text-[#ffab00]"
+                  }`}>
+                    {subStatus === "active" ? (
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                    ) : (
+                      <CreditCard className="h-3.5 w-3.5" />
+                    )}
+                    <span className="hidden sm:inline">
+                      {subStatus === "active"
+                        ? "Premium"
+                        : diasTolerancia > 0
+                        ? `${diasTolerancia}d tolerância`
+                        : "Regularizar"}
+                    </span>
+                  </Button>
+                </Link>
+              )}
+              {subStatus === "none" && (
+                <Link href="/planos">
+                  <Button variant="ghost" size="sm" className="gap-1.5 text-xs text-muted-foreground">
+                    <CreditCard className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Assinar</span>
+                  </Button>
+                </Link>
+              )}
               <Link href="/dashboard/profile">
                 <Button variant="ghost" size="sm" className="gap-2">
                   {profile?.avatar_url ? (
