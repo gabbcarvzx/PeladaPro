@@ -63,7 +63,7 @@ function LoginForm() {
         </motion.div>
         <CardTitle className="text-2xl">
           Entrar no{" "}
-          <span className="bg-gradient-to-r from-primary to-blue-600 bg-clip-text text-transparent">
+          <span className="bg-gradient-brand bg-clip-text text-transparent">
             PeladaPro
           </span>
         </CardTitle>

@@ -21,10 +21,12 @@ import {
   Loader2,
   Copy,
   Settings2,
+  Sparkles,
 } from "lucide-react"
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarImage } from "@/components/ui/avatar"
 import { AvatarPlaceholder } from "@/components/ui/avatar-placeholder"
 import { EmptyState } from "@/components/ui/empty-state"
+import { BadgeStatus } from "@/components/ui/badge-status"
 import { AuthService } from "@/services/auth-service"
 import { PeladaService } from "@/services/pelada-service"
 import { ThemeToggle } from "@/components/layout/theme-toggle"
@@ -87,13 +89,15 @@ export default function DashboardPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-3">
-              <span className="text-2xl">⚽</span>
-              <span className="text-lg font-bold bg-gradient-to-r from-primary to-blue-600 bg-clip-text text-transparent">
+              <div className="w-8 h-8 rounded-lg bg-[#00e676]/10 flex items-center justify-center">
+                <span className="text-base">⚽</span>
+              </div>
+              <span className="text-lg font-bold bg-gradient-brand bg-clip-text text-transparent">
                 PeladaPro
               </span>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
               <Link href="/dashboard/profile">
                 <Button variant="ghost" size="sm" className="gap-2">
                   {profile?.avatar_url ? (
@@ -128,14 +132,14 @@ export default function DashboardPage() {
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
             <div>
               <h1 className="text-3xl font-bold">
-                Olá, {profile?.nome?.split(" ")[0] || "Jogador"}! 👋
+                Olá, {profile?.nome?.split(" ")[0] || "Jogador"}
               </h1>
-              <p className="text-muted-foreground mt-1">
+              <p className="text-[#a3a3a3] mt-1">
                 Gerencie suas peladas e confirme presença nos jogos.
               </p>
             </div>
             <Link href="/pelada/create">
-              <Button variant="gradient" size="lg">
+              <Button variant="glow" size="lg">
                 <Plus className="mr-2 h-5 w-5" />
                 Nova Pelada
               </Button>
@@ -145,26 +149,24 @@ export default function DashboardPage() {
           {/* Stats Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
             {[
-              { icon: Calendar, label: "Peladas Ativas", value: peladas.length.toString(), color: "text-primary" },
-              { icon: Users, label: "Jogadores", value: "—", color: "text-blue-500" },
-              { icon: Trophy, label: "Jogos Realizados", value: "0", color: "text-yellow-500" },
-              { icon: Settings, label: "Tipo", value: profile?.tipo === "mensalista" ? "Mensalista" : "Diarista", color: "text-purple-500" },
+              { icon: Calendar, label: "Peladas Ativas", value: peladas.length.toString() },
+              { icon: Users, label: "Tipo", value: profile?.tipo === "mensalista" ? "Mensalista" : "Diarista" },
+              { icon: Trophy, label: "Jogos Realizados", value: "0" },
+              { icon: Settings, label: "Jogadores Totais", value: "—" },
             ].map((stat, i) => (
               <FadeIn key={i} delay={i * 0.05}>
                 <motion.div whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}>
-                <Card className="hover:shadow-md transition-all duration-200 card-hover">
-                  <CardContent className="p-6">
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
-                        <stat.icon className={`h-5 w-5 ${stat.color}`} />
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">{stat.label}</p>
-                        <p className="text-2xl font-bold">{stat.value}</p>
-                      </div>
+                <div className="p-5 rounded-xl bg-[#1a1a1a] border border-[#2a2a2a] hover:border-[#00e676]/20 transition-all duration-200">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-lg bg-[#00e676]/10 flex items-center justify-center">
+                      <stat.icon className="h-5 w-5 text-[#00e676]" />
                     </div>
-                  </CardContent>
-                </Card>
+                    <div>
+                      <p className="text-sm text-[#6b7280]">{stat.label}</p>
+                      <p className="text-2xl font-bold text-[#fafafa]">{stat.value}</p>
+                    </div>
+                  </div>
+                </div>
                 </motion.div>
               </FadeIn>
             ))}
@@ -172,14 +174,16 @@ export default function DashboardPage() {
 
           {/* Peladas List */}
           <FadeIn>
-            <Card>
-              <CardHeader>
-                <CardTitle>Minhas Peladas</CardTitle>
-                <CardDescription>
-                  Gerencie suas peladas ou crie uma nova para começar.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
+            <div className="rounded-xl bg-[#1a1a1a] border border-[#2a2a2a] overflow-hidden">
+              <div className="flex items-center justify-between p-6 pb-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-[#fafafa]">Minhas Peladas</h2>
+                  <p className="text-sm text-[#6b7280]">
+                    Gerencie suas peladas ou crie uma nova para começar.
+                  </p>
+                </div>
+              </div>
+              <div className="px-6 pb-6">
                 {loadingPeladas ? (
                   <div className="space-y-4">
                     {[1, 2, 3].map((i) => (
@@ -194,7 +198,7 @@ export default function DashboardPage() {
                     action={
                       <Link href="/pelada/create">
                         <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-                          <Button variant="gradient">
+                          <Button variant="glow">
                             <Plus className="mr-2 h-5 w-5" />
                             Criar Pelada
                           </Button>
@@ -203,7 +207,7 @@ export default function DashboardPage() {
                     }
                   />
                 ) : (
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     {peladas.map((pelada, i) => (
                       <motion.div
                         key={pelada.id}
@@ -211,19 +215,24 @@ export default function DashboardPage() {
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: i * 0.05 }}
                       >
-                        <div className="flex items-center justify-between p-4 rounded-lg border border-border hover:bg-muted/50 transition-colors group">
+                        <div className="flex items-center justify-between p-4 rounded-lg bg-[#121212] border border-[#2a2a2a] hover:border-[#00e676]/20 transition-all duration-200 group">
                           <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                              <Calendar className="h-5 w-5 text-primary" />
+                            <div className="w-10 h-10 rounded-lg bg-[#00e676]/10 flex items-center justify-center">
+                              <Calendar className="h-5 w-5 text-[#00e676]" />
                             </div>
                             <div>
-                              <p className="font-medium">{pelada.nome}</p>
-                              <p className="text-sm text-muted-foreground">
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium text-[#fafafa]">{pelada.nome}</p>
+                                {pelada.admin_id === user?.id && (
+                                  <BadgeStatus type="admin" />
+                                )}
+                              </div>
+                              <p className="text-sm text-[#6b7280]">
                                 {pelada.jogadores_por_time}v{pelada.jogadores_por_time} · {pelada.numero_times} times · {pelada.limite_jogadores} jogadores
                               </p>
                             </div>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1">
                             <Button
                               variant="ghost"
                               size="sm"
@@ -243,8 +252,8 @@ export default function DashboardPage() {
                     ))}
                   </div>
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           </FadeIn>
         </PageTransition>
       </main>

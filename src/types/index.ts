@@ -59,6 +59,17 @@ export interface ConfirmacaoDia {
   profile?: Profile
 }
 
+export interface ListaEspera {
+  id: string
+  pelada_id: string
+  user_id: string
+  data_jogo: string
+  posicao: number
+  prioridade: PlayerType
+  created_at: string
+  profile?: Profile
+}
+
 export interface HistoricoSorteio {
   id: string
   pelada_id: string

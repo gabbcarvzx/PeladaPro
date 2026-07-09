@@ -51,8 +51,10 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-2">
-              <span className="text-2xl">⚽</span>
-              <span className="text-xl font-bold bg-gradient-to-r from-primary to-blue-600 bg-clip-text text-transparent">
+              <div className="w-7 h-7 rounded-md bg-[#00e676]/10 flex items-center justify-center">
+                <span className="text-sm">⚽</span>
+              </div>
+              <span className="text-xl font-bold bg-gradient-brand bg-clip-text text-transparent">
                 PeladaPro
               </span>
             </div>
@@ -61,7 +63,7 @@ export default function Home() {
                 <Button variant="ghost">Entrar</Button>
               </Link>
               <Link href="/auth/register">
-                <Button variant="gradient" size="sm">
+                <Button variant="glow" size="sm">
                   Cadastrar
                 </Button>
               </Link>
@@ -72,12 +74,13 @@ export default function Home() {
 
       {/* Hero Section */}
       <section className="relative min-h-screen flex items-center justify-center overflow-hidden pt-16">
-        {/* Background gradient */}
-        <div className="absolute inset-0 bg-gradient-animated opacity-10" />
+        {/* Background */}
+        <div className="absolute inset-0 bg-gradient-hero" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(0,230,118,0.08)_0%,transparent_60%)]" />
 
         {/* Decorative circles */}
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/20 rounded-full blur-3xl" />
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-blue-600/20 rounded-full blur-3xl" />
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-[#00e676]/10 rounded-full blur-3xl" />
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-[#00e676]/5 rounded-full blur-3xl" />
 
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <FadeIn>
@@ -91,9 +94,9 @@ export default function Home() {
           </FadeIn>
 
           <FadeIn delay={0.1}>
-            <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tight mb-6">
+            <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tight mb-6 text-[#fafafa]">
               Organize suas{" "}
-              <span className="bg-gradient-to-r from-primary to-blue-600 bg-clip-text text-transparent">
+              <span className="bg-gradient-brand bg-clip-text text-transparent">
                 Peladas
               </span>{" "}
               com Facilidade
@@ -101,7 +104,7 @@ export default function Home() {
           </FadeIn>
 
           <FadeIn delay={0.2}>
-            <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto mb-8">
+            <p className="text-lg sm:text-xl text-[#6b7280] max-w-2xl mx-auto mb-8">
               Crie peladas, convide amigos, confirme presença e sorteie times
               equilibrados — tudo em um só lugar, de graça.
             </p>
@@ -110,7 +113,7 @@ export default function Home() {
           <FadeIn delay={0.3}>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link href="/auth/register">
-                <Button size="xl" variant="gradient">
+                <Button size="xl" variant="glow">
                   Começar Agora
                   <ArrowRight className="ml-2 h-5 w-5" />
                 </Button>
@@ -132,12 +135,12 @@ export default function Home() {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.5 + i * 0.1 }}
-                  className="flex flex-col items-center gap-2 p-4 rounded-xl bg-muted/50"
+                  className="flex flex-col items-center gap-2 p-4 rounded-xl bg-[#1a1a1a] border border-[#2a2a2a]"
                 >
-                  <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-sm font-bold">
+                  <div className="w-8 h-8 rounded-full bg-[#00e676] text-[#0a0a0a] flex items-center justify-center text-sm font-bold">
                     {i + 1}
                   </div>
-                  <p className="text-sm text-center text-muted-foreground">{step}</p>
+                  <p className="text-sm text-center text-[#6b7280]">{step}</p>
                 </motion.div>
               ))}
             </div>
@@ -146,13 +149,13 @@ export default function Home() {
       </section>
 
       {/* Features Section */}
-      <section className="py-24 bg-muted/30">
+      <section className="py-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <FadeIn>
-            <h2 className="text-3xl sm:text-4xl font-bold text-center mb-4">
+            <h2 className="text-3xl sm:text-4xl font-bold text-center mb-4 text-[#fafafa]">
               Tudo que você precisa
             </h2>
-            <p className="text-muted-foreground text-center mb-12 max-w-2xl mx-auto">
+            <p className="text-[#6b7280] text-center mb-12 max-w-2xl mx-auto">
               Ferramentas completas para organizar peladas de futebol como um profissional
             </p>
           </FadeIn>
@@ -162,13 +165,13 @@ export default function Home() {
               <StaggerItem key={i}>
                 <motion.div
                   whileHover={{ y: -4 }}
-                  className="p-6 rounded-xl border border-border bg-background hover:shadow-lg transition-all duration-200"
+                  className="p-6 rounded-xl bg-[#1a1a1a] border border-[#2a2a2a] hover:border-[#00e676]/20 transition-all duration-200"
                 >
-                  <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
-                    <feature.icon className="h-6 w-6 text-primary" />
+                  <div className="w-12 h-12 rounded-lg bg-[#00e676]/10 flex items-center justify-center mb-4">
+                    <feature.icon className="h-6 w-6 text-[#00e676]" />
                   </div>
-                  <h3 className="font-semibold mb-2">{feature.title}</h3>
-                  <p className="text-sm text-muted-foreground">
+                  <h3 className="font-semibold mb-2 text-[#fafafa]">{feature.title}</h3>
+                  <p className="text-sm text-[#6b7280]">
                     {feature.description}
                   </p>
                 </motion.div>
@@ -179,35 +182,35 @@ export default function Home() {
       </section>
 
       {/* CTA Section */}
-      <section className="py-24">
+      <section className="py-24 bg-[#121212]">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <FadeIn>
-            <div className="p-12 rounded-2xl bg-gradient-to-br from-dark to-dark-light border border-primary/20">
-              <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">
+            <div className="p-12 rounded-2xl bg-gradient-to-br from-[#1a1a1a] to-[#121212] border border-[#00e676]/20">
+              <h2 className="text-3xl sm:text-4xl font-bold text-[#fafafa] mb-4">
                 Pronto para Organizar sua Pelada?
               </h2>
-              <p className="text-white/70 mb-8 max-w-xl mx-auto">
+              <p className="text-[#6b7280] mb-8 max-w-xl mx-auto">
                 Junte-se a centenas de jogadores que já usam o PeladaPro para
                 organizar suas partidas.
               </p>
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                 <Link href="/auth/register">
-                  <Button size="lg" variant="gradient" className="bg-gradient-to-r from-primary to-blue-600 text-white">
+                  <Button size="lg" variant="glow">
                     Criar Conta Gratuita
                     <ArrowRight className="ml-2 h-5 w-5" />
                   </Button>
                 </Link>
               </div>
 
-              <div className="mt-8 flex flex-wrap items-center justify-center gap-6 text-sm text-white/60">
+              <div className="mt-8 flex flex-wrap items-center justify-center gap-6 text-sm text-[#6b7280]">
                 <span className="flex items-center gap-1">
-                  <CheckCircle2 className="h-4 w-4 text-primary" /> Sem cartão de crédito
+                  <CheckCircle2 className="h-4 w-4 text-[#00e676]" /> Sem cartão de crédito
                 </span>
                 <span className="flex items-center gap-1">
-                  <CheckCircle2 className="h-4 w-4 text-primary" /> 100% gratuito
+                  <CheckCircle2 className="h-4 w-4 text-[#00e676]" /> 100% gratuito
                 </span>
                 <span className="flex items-center gap-1">
-                  <CheckCircle2 className="h-4 w-4 text-primary" /> Deploy na Vercel
+                  <CheckCircle2 className="h-4 w-4 text-[#00e676]" /> Deploy na Vercel
                 </span>
               </div>
             </div>
@@ -216,8 +219,8 @@ export default function Home() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-border py-8">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-sm text-muted-foreground">
+      <footer className="border-t border-[#2a2a2a] py-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-sm text-[#6b7280]">
           <p>© {new Date().getFullYear()} PeladaPro. Feito com ⚽ para os amantes do futebol.</p>
         </div>
       </footer>

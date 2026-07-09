@@ -185,8 +185,10 @@ export default function SorteioPage({ params }: Props) {
                   <ArrowLeft className="h-5 w-5" />
                 </Button>
               </Link>
-              <span className="text-2xl">⚽</span>
-              <span className="text-lg font-bold bg-gradient-to-r from-primary to-blue-600 bg-clip-text text-transparent">
+              <div className="w-7 h-7 rounded-md bg-[#00e676]/10 flex items-center justify-center">
+                <span className="text-sm">⚽</span>
+              </div>
+              <span className="text-lg font-bold bg-gradient-brand bg-clip-text text-transparent">
                 PeladaPro
               </span>
             </div>
@@ -411,19 +413,19 @@ export default function SorteioPage({ params }: Props) {
                               animate={{ opacity: 1, y: 0, scale: 1 }}
                               transition={{ delay: 0.3 + index * 0.15, type: "spring", stiffness: 200 }}
                             >
-                              <Card className="overflow-hidden border-t-4 hover:shadow-lg transition-shadow"
-                                style={{ borderTopColor: index === 0 ? "#00c853" : index === 1 ? "#ef4444" : index === 2 ? "#3b82f6" : index === 3 ? "#f59e0b" : undefined }}
+                              <div className="rounded-xl bg-[#1a1a1a] border border-[#2a2a2a] overflow-hidden hover:border-[#00e676]/20 transition-all duration-200"
+                                style={{ borderTop: `3px solid ${index === 0 ? "#00e676" : index === 1 ? "#ff5252" : index === 2 ? "#3b82f6" : index === 3 ? "#ffab00" : "#6b7280"}` }}
                               >
-                                <CardHeader className="pb-3">
-                                  <CardTitle className="text-lg flex items-center gap-2">
-                                    <span className={`w-4 h-4 rounded-full ${cor.bg}`} />
+                                <div className="p-5 pb-3">
+                                  <h3 className="text-lg font-semibold text-[#fafafa] flex items-center gap-2">
+                                    <span className={`w-3 h-3 rounded-full ${cor.bg}`} />
                                     {time.nome}
-                                    <span className="text-xs text-muted-foreground font-normal ml-auto">
+                                    <span className="text-xs text-[#6b7280] font-normal ml-auto">
                                       {time.jogadores.length} jogadores
                                     </span>
-                                  </CardTitle>
-                                </CardHeader>
-                                <CardContent>
+                                  </h3>
+                                </div>
+                                <div className="px-5 pb-5">
                                   <AnimatePresence>
                                     {time.jogadores.map((jogador, jIndex) => (
                                       <motion.div
@@ -431,7 +433,7 @@ export default function SorteioPage({ params }: Props) {
                                         initial={{ opacity: 0, x: -20 }}
                                         animate={{ opacity: 1, x: 0 }}
                                         transition={{ delay: 0.5 + index * 0.15 + jIndex * 0.08 }}
-                                        className="flex items-center gap-3 py-2 border-b border-border last:border-0"
+                                        className="flex items-center gap-3 py-2 border-b border-[#2a2a2a] last:border-0"
                                       >
                                         <span className="text-xs text-muted-foreground w-5">
                                           {jIndex + 1}
@@ -449,8 +451,8 @@ export default function SorteioPage({ params }: Props) {
                                       </motion.div>
                                     ))}
                                   </AnimatePresence>
-                                </CardContent>
-                              </Card>
+                                </div>
+                              </div>
                             </motion.div>
                           )
                         })}

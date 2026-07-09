@@ -1,43 +1,81 @@
 @import "tailwindcss";
 
+/* ==========================================
+   PeladaPro — Design Tokens
+   Tema: Preto + Verde Neon (Supabase-inspired)
+   ========================================== */
+
 @theme inline {
-  --color-primary: #00c853;
-  --color-primary-dark: #00a844;
+  /* Primary - Verde Neon */
+  --color-primary: #00e676;
+  --color-primary-dark: #00c853;
   --color-primary-light: #69f0ae;
-  --color-dark: #0f3d2e;
-  --color-dark-light: #1a5a44;
-  --color-dark-card: #0d2818;
+  --color-primary-glow: 0 0 20px rgba(0, 230, 118, 0.35);
+
+  /* Backgrounds */
+  --color-bg-primary: #0a0a0a;
+  --color-bg-secondary: #121212;
+  --color-bg-card: #1a1a1a;
+  --color-bg-elevated: #242424;
+
+  /* Surface tones */
   --color-surface: #f8fafc;
   --color-surface-dark: #0a0a0a;
 
-  --color-background: #ffffff;
-  --color-foreground: #171717;
-  --color-muted: #f1f5f9;
-  --color-muted-foreground: #64748b;
-  --color-border: #e2e8f0;
-  --color-accent: #0f3d2e;
-  --color-accent-foreground: #ffffff;
-  --color-destructive: #ef4444;
+  /* Text */
+  --color-text-primary: #fafafa;
+  --color-text-secondary: #a3a3a3;
+  --color-text-muted: #6b7280;
 
+  /* Borders & Dividers */
+  --color-border-default: #2a2a2a;
+  --color-border-subtle: #1f1f1f;
+
+  /* Feedback */
+  --color-success: #00e676;
+  --color-error: #ff5252;
+  --color-warning: #ffab00;
+
+  /* Legacy mappings */
+  --color-background: #0a0a0a;
+  --color-foreground: #fafafa;
+  --color-muted: #1a1a1a;
+  --color-muted-foreground: #6b7280;
+  --color-border: #2a2a2a;
+  --color-accent: #00e676;
+  --color-accent-foreground: #0a0a0a;
+  --color-destructive: #ff5252;
+
+  /* Fonts */
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
+  /* Radius */
   --radius-sm: 0.375rem;
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
   --radius-xl: 1rem;
 }
 
-/* Dark mode overrides */
-.dark {
-  --color-background: #0a0a0a;
-  --color-foreground: #ededed;
-  --color-muted: #1a1a2e;
-  --color-muted-foreground: #94a3b8;
-  --color-border: #1e293b;
+/* Light mode overrides */
+.light {
+  --color-bg-primary: #fafafa;
+  --color-bg-secondary: #f5f5f5;
+  --color-bg-card: #ffffff;
+  --color-bg-elevated: #ffffff;
+  --color-text-primary: #0a0a0a;
+  --color-text-secondary: #525252;
+  --color-text-muted: #a3a3a3;
+  --color-border-default: #e5e5e5;
+  --color-border-subtle: #f0f0f0;
+  --color-background: #fafafa;
+  --color-foreground: #0a0a0a;
+  --color-muted: #f5f5f5;
+  --color-muted-foreground: #a3a3a3;
+  --color-border: #e5e5e5;
   --color-accent: #00c853;
-  --color-accent-foreground: #0a0a0a;
-  --color-surface: #0d1117;
+  --color-accent-foreground: #ffffff;
+  --color-destructive: #dc2626;
 }
 
 @layer base {
@@ -46,42 +84,49 @@
   }
 
   body {
-    background-color: var(--color-background);
-    color: var(--color-foreground);
+    background-color: var(--color-bg-primary);
+    color: var(--color-text-primary);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     transition: background-color 0.3s ease, color 0.3s ease;
   }
+
+  ::selection {
+    background: rgba(0, 230, 118, 0.2);
+    color: var(--color-text-primary);
+  }
 }
 
-/* Glassmorphism utility */
+/* ==========================================
+   Glassmorphism
+   ========================================== */
 @utility glass {
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.light .glass {
   background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(0, 0, 0, 0.06);
 }
 
-.dark .glass {
-  background: rgba(15, 15, 30, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+/* ==========================================
+   Gradiente animado do hero
+   ========================================== */
+@utility bg-gradient-hero {
+  background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 50%, #0d2818 100%);
 }
 
-/* Animated gradient background */
-@utility bg-gradient-animated {
-  background: linear-gradient(-45deg, #0f3d2e, #00c853, #0d2818, #1a237e);
-  background-size: 400% 400%;
-  animation: gradient-shift 15s ease infinite;
+.light .bg-gradient-hero {
+  background: linear-gradient(135deg, #fafafa 0%, #f0fdf4 50%, #f5f5f5 100%);
 }
 
-@keyframes gradient-shift {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
-}
-
-/* Skeleton animation */
+/* ==========================================
+   Skeleton animation
+   ========================================== */
 @utility skeleton-pulse {
   animation: skeleton-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   background-color: var(--color-muted);
@@ -92,7 +137,9 @@
   50% { opacity: 0.5; }
 }
 
-/* Custom scrollbar */
+/* ==========================================
+   Scrollbar personalizada
+   ========================================== */
 ::-webkit-scrollbar {
   width: 6px;
 }
@@ -102,20 +149,63 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--color-border);
+  background: var(--color-border-default);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-muted-foreground);
+  background: var(--color-text-muted);
 }
 
-/* Focus ring utility */
+/* ==========================================
+   Focus ring
+   ========================================== */
 @utility focus-ring {
-  @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2;
+  @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00e676] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0a];
 }
 
-/* Card hover effect */
+.light .focus-ring {
+  @apply focus-visible:ring-offset-[#fafafa];
+}
+
+/* ==========================================
+   Card hover
+   ========================================== */
 @utility card-hover {
   @apply transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.light .card-hover {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+/* ==========================================
+   Neon glow para o botão primário
+   ========================================== */
+@utility glow-primary {
+  box-shadow: 0 0 20px rgba(0, 230, 118, 0.25);
+}
+
+/* ==========================================
+   Gradiente do header/brand
+   ========================================== */
+@utility bg-gradient-brand {
+  background: linear-gradient(135deg, #00e676, #00c853);
+}
+
+/* ==========================================
+   Input customizado
+   ========================================== */
+@utility input-neon {
+  @apply w-full h-10 rounded-lg border px-3 text-sm transition-all;
+  background-color: var(--color-bg-elevated);
+  border-color: var(--color-border-default);
+  color: var(--color-text-primary);
+}
+
+.input-neon:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(0, 230, 118, 0.1);
 }

@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
-import type { Pelada, PeladaParticipante, ConfirmacaoDia, HistoricoSorteio, SorteioModo } from "@/types"
+import type { Pelada, PeladaParticipante, ConfirmacaoDia, ListaEspera, HistoricoSorteio, SorteioModo } from "@/types"
 
 export class PeladaService {
   private supabase: SupabaseClient
@@ -151,6 +151,56 @@ export class PeladaService {
     await this.supabase.from("peladas").delete().eq("id", peladaId)
   }
 
+  /**
+   * Promove o primeiro jogador da fila de espera.
+   * Retorna o user_id do promovido ou null.
+   */
+  async promoverDaFila(peladaId: string, dataJogo: string): Promise<string | null> {
+    const { data: promovidoId } = await this.supabase.rpc("promover_primeiro_fila", {
+      p_pelada_id: peladaId,
+      p_data: dataJogo,
+    })
+
+    return (promovidoId as string) || null
+  }
+
+  /**
+   * Admin promove um jogador específico da fila de espera diretamente,
+   * sem verificar limite de jogadores.
+   */
+  async adminPromoverDaFila(peladaId: string, userId: string, dataJogo: string): Promise<boolean> {
+    // Remove da lista de espera
+    const { error: deleteError } = await this.supabase
+      .from("lista_espera")
+      .delete()
+      .eq("pelada_id", peladaId)
+      .eq("user_id", userId)
+      .eq("data_jogo", dataJogo)
+
+    if (deleteError) return false
+
+    // Atualiza confirmação para confirmado
+    await this.supabase.from("confirmacoes_dia").upsert({
+      pelada_id: peladaId,
+      user_id: userId,
+      data_jogo: dataJogo,
+      status: "confirmado",
+    }, {
+      onConflict: "pelada_id, user_id, data_jogo",
+    })
+
+    // Reordena fila
+    const fila = await this.getFilaEspera(peladaId, dataJogo)
+    for (let i = 0; i < fila.length; i++) {
+      await this.supabase
+        .from("lista_espera")
+        .update({ posicao: i + 1 })
+        .eq("id", fila[i].id)
+    }
+
+    return true
+  }
+
   // ==========================================
   // PARTICIPANTES
   // ==========================================
@@ -214,9 +264,6 @@ export class PeladaService {
   // ==========================================
 
   /**
-   * Confirma presença para um dia específico
-   */
-  /**
    * Verifica se o usuário é participante da pelada
    */
   private async isParticipante(peladaId: string, userId: string): Promise<boolean> {
@@ -232,29 +279,102 @@ export class PeladaService {
 
   /**
    * Confirma presença para um dia específico
+   * Se a pelada estiver lotada e o jogador for diarista,
+   * vai automaticamente para a lista de espera.
+   * Mensalistas sempre entram (prioridade).
    */
-  async confirmarPresenca(peladaId: string, userId: string, dataJogo: string): Promise<void> {
+  async confirmarPresenca(peladaId: string, userId: string, dataJogo: string): Promise<{ status: "confirmado" | "fila"; posicao?: number }> {
     if (!(await this.isParticipante(peladaId, userId))) {
       throw new Error("Você não é participante desta pelada")
     }
 
+    const pelada = await this.getById(peladaId)
+    if (!pelada) throw new Error("Pelada não encontrada")
+
+    // Busca o tipo do jogador na pelada
+    const participantes = await this.getParticipantes(peladaId)
+    const participante = participantes.find((p) => p.user_id === userId)
+    if (!participante) throw new Error("Participante não encontrado")
+
+    // Conta confirmados atuais
+    const confirmados = await this.getConfirmacoes(peladaId, dataJogo)
+    const confirmadosCount = confirmados.filter((c) => c.status === "confirmado").length
+    const isMensalista = participante.tipo === "mensalista"
+
+    // Se é mensalista OU ainda há vagas, confirma normalmente
+    if (isMensalista || confirmadosCount < pelada.limite_jogadores) {
+      await this.supabase.from("confirmacoes_dia").upsert({
+        pelada_id: peladaId,
+        user_id: userId,
+        data_jogo: dataJogo,
+        status: "confirmado",
+      }, {
+        onConflict: "pelada_id, user_id, data_jogo",
+      })
+
+      // Se é mensalista e a pelada está cheia, ainda confirma (prioridade)
+      // Remove da fila de espera caso estivesse
+      await this.supabase
+        .from("lista_espera")
+        .delete()
+        .eq("pelada_id", peladaId)
+        .eq("user_id", userId)
+        .eq("data_jogo", dataJogo)
+
+      return { status: "confirmado" }
+    }
+
+    // Pelada lotada e jogador é diarista → vai para fila de espera
+    const { data: posicaoData } = await this.supabase.rpc("proxima_posicao_fila", {
+      p_pelada_id: peladaId,
+      p_data: dataJogo,
+    })
+    const posicao = (posicaoData as number) || 1
+
+    // Primeiro upsert na confirmação como pendente
     await this.supabase.from("confirmacoes_dia").upsert({
       pelada_id: peladaId,
       user_id: userId,
       data_jogo: dataJogo,
-      status: "confirmado",
+      status: "pendente",
     }, {
       onConflict: "pelada_id, user_id, data_jogo",
     })
+
+    // Depois insere na fila de espera
+    await this.supabase.from("lista_espera").insert({
+      pelada_id: peladaId,
+      user_id: userId,
+      data_jogo: dataJogo,
+      posicao,
+      prioridade: "diarista",
+    })
+
+    return { status: "fila", posicao }
   }
 
   /**
    * Recusa presença para um dia específico
+   * Se o jogador estava confirmado, promove automaticamente
+   * o primeiro da fila de espera.
    */
-  async recusarPresenca(peladaId: string, userId: string, dataJogo: string): Promise<void> {
+  async recusarPresenca(peladaId: string, userId: string, dataJogo: string): Promise<{ promovido: boolean; nomePromovido?: string }> {
     if (!(await this.isParticipante(peladaId, userId))) {
       throw new Error("Você não é participante desta pelada")
     }
+
+    // Verificar status atual antes de recusar
+    const confirmacoes = await this.getConfirmacoes(peladaId, dataJogo)
+    const minhaConfirmacao = confirmacoes.find((c) => c.user_id === userId)
+    const estavaConfirmado = minhaConfirmacao?.status === "confirmado"
+
+    // Remove da fila de espera se estiver
+    await this.supabase
+      .from("lista_espera")
+      .delete()
+      .eq("pelada_id", peladaId)
+      .eq("user_id", userId)
+      .eq("data_jogo", dataJogo)
 
     await this.supabase.from("confirmacoes_dia").upsert({
       pelada_id: peladaId,
@@ -264,6 +384,27 @@ export class PeladaService {
     }, {
       onConflict: "pelada_id, user_id, data_jogo",
     })
+
+    // Se estava confirmado, promove primeiro da fila
+    if (estavaConfirmado) {
+      const { data: promovidoId } = await this.supabase.rpc("promover_primeiro_fila", {
+        p_pelada_id: peladaId,
+        p_data: dataJogo,
+      })
+
+      if (promovidoId) {
+        // Buscar nome do promovido
+        const { data: profile } = await this.supabase
+          .from("profiles")
+          .select("nome")
+          .eq("id", promovidoId as string)
+          .single()
+
+        return { promovido: true, nomePromovido: (profile as any)?.nome || "Jogador" }
+      }
+    }
+
+    return { promovido: false }
   }
 
   /**
@@ -290,6 +431,68 @@ export class PeladaService {
       .order("ordem_chegada", { ascending: true, nullsFirst: false })
 
     return (data as unknown as ConfirmacaoDia[]) || []
+  }
+
+  // ==========================================
+  // LISTA DE ESPERA
+  // ==========================================
+
+  /**
+   * Retorna a fila de espera completa para uma data, ordenada por posição
+   */
+  async getFilaEspera(peladaId: string, dataJogo: string): Promise<ListaEspera[]> {
+    const { data } = await this.supabase
+      .from("lista_espera")
+      .select("*, profile:profiles(*)")
+      .eq("pelada_id", peladaId)
+      .eq("data_jogo", dataJogo)
+      .order("posicao", { ascending: true })
+
+    return (data as unknown as ListaEspera[]) || []
+  }
+
+  /**
+   * Retorna a posição de um jogador na fila de espera (0 = não está na fila)
+   */
+  async getPosicaoFila(peladaId: string, userId: string, dataJogo: string): Promise<number> {
+    const { data } = await this.supabase
+      .from("lista_espera")
+      .select("posicao")
+      .eq("pelada_id", peladaId)
+      .eq("user_id", userId)
+      .eq("data_jogo", dataJogo)
+      .single()
+
+    return (data as any)?.posicao || 0
+  }
+
+  /**
+   * Verifica se o jogador está na fila de espera
+   */
+  async isNaFila(peladaId: string, userId: string, dataJogo: string): Promise<boolean> {
+    const posicao = await this.getPosicaoFila(peladaId, userId, dataJogo)
+    return posicao > 0
+  }
+
+  /**
+   * Remove um jogador da fila de espera
+   */
+  async sairFilaEspera(peladaId: string, userId: string, dataJogo: string): Promise<void> {
+    await this.supabase
+      .from("lista_espera")
+      .delete()
+      .eq("pelada_id", peladaId)
+      .eq("user_id", userId)
+      .eq("data_jogo", dataJogo)
+
+    // Reordena posições da fila (fecha o buraco)
+    const fila = await this.getFilaEspera(peladaId, dataJogo)
+    for (let i = 0; i < fila.length; i++) {
+      await this.supabase
+        .from("lista_espera")
+        .update({ posicao: i + 1 })
+        .eq("id", fila[i].id)
+    }
   }
 
   // ==========================================

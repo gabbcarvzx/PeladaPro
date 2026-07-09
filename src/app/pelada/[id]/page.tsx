@@ -46,8 +46,13 @@ import {
   ChevronDown,
   ChevronUp,
   LogOut,
+  ListOrdered,
+  UserPlus,
+  ArrowUp,
+  Zap,
 } from "lucide-react"
-import type { Pelada, PeladaParticipante, ConfirmacaoDia } from "@/types"
+import type { Pelada, PeladaParticipante, ConfirmacaoDia, ListaEspera } from "@/types"
+import { BadgeStatus } from "@/components/ui/badge-status"
 
 interface Props {
   params: Promise<{ id: string }>
@@ -65,6 +70,10 @@ export default function PeladaDetailPage({ params }: Props) {
   const [showParticipants, setShowParticipants] = useState(true)
   const [confirmacoes, setConfirmacoes] = useState<ConfirmacaoDia[]>([])
   const [showConfirmacoes, setShowConfirmacoes] = useState(false)
+  const [filaEspera, setFilaEspera] = useState<ListaEspera[]>([])
+  const [showFila, setShowFila] = useState(false)
+  const [minhaPosicaoFila, setMinhaPosicaoFila] = useState(0)
+  const [promovidoInfo, setPromovidoInfo] = useState<{ nome: string } | null>(null)
 
   const isAdmin = user?.id === pelada?.admin_id
 
@@ -80,6 +89,7 @@ export default function PeladaDetailPage({ params }: Props) {
   useEffect(() => {
     if (confirmingDate && user) {
       loadConfirmacoes()
+      loadFilaEspera()
     }
   }, [confirmingDate])
 
@@ -146,18 +156,48 @@ export default function PeladaDetailPage({ params }: Props) {
     setShowConfirmacoes(true)
   }
 
+  const loadFilaEspera = async () => {
+    if (!confirmingDate || !user) return
+    const fila = await peladaService.getFilaEspera(peladaId, confirmingDate)
+    setFilaEspera(fila)
+    setShowFila(true)
+    const minhaPos = await peladaService.getPosicaoFila(peladaId, user.id, confirmingDate)
+    setMinhaPosicaoFila(minhaPos)
+  }
+
   const handleConfirmarPresenca = async () => {
     if (!user || !confirmingDate) return
-    await peladaService.confirmarPresenca(peladaId, user.id, confirmingDate)
-    toast({ title: "Presença confirmada!", variant: "success" })
+    const result = await peladaService.confirmarPresenca(peladaId, user.id, confirmingDate)
+
+    if (result.status === "fila") {
+      toast({
+        title: "Pelada lotada — você foi para a fila de espera!",
+        description: `Sua posição: ${result.posicao}º`, 
+        variant: "default",
+      })
+    } else {
+      toast({ title: "Presença confirmada!", variant: "success" })
+    }
     await loadConfirmacoes()
+    await loadFilaEspera()
   }
 
   const handleRecusarPresenca = async () => {
     if (!user || !confirmingDate) return
-    await peladaService.recusarPresenca(peladaId, user.id, confirmingDate)
-    toast({ title: "Presença recusada" })
+    const result = await peladaService.recusarPresenca(peladaId, user.id, confirmingDate)
+
+    if (result.promovido && result.nomePromovido) {
+      setPromovidoInfo({ nome: result.nomePromovido })
+      toast({
+        title: "Presença recusada — alguém foi chamado!",
+        description: `${result.nomePromovido} foi promovido da fila de espera.`,
+        variant: "default",
+      })
+    } else {
+      toast({ title: "Presença recusada" })
+    }
     await loadConfirmacoes()
+    await loadFilaEspera()
   }
 
   const handleConfirmarChegada = async (userId: string, ordem: number) => {
@@ -165,6 +205,33 @@ export default function PeladaDetailPage({ params }: Props) {
     await peladaService.confirmarChegada(peladaId, userId, confirmingDate, ordem)
     toast({ title: `Chegada confirmada! Ordem: ${ordem}º`, variant: "success" })
     await loadConfirmacoes()
+  }
+
+  const handlePromoverDaFila = async (userId: string) => {
+    if (!confirmingDate) return
+    const success = await peladaService.adminPromoverDaFila(peladaId, userId, confirmingDate)
+    if (success) {
+      toast({ title: "Jogador promovido da fila!", variant: "success" })
+    } else {
+      toast({ title: "Erro ao promover jogador", variant: "destructive" })
+    }
+    await loadConfirmacoes()
+    await loadFilaEspera()
+  }
+
+  const handleRemoverDaFila = async (userId: string) => {
+    if (!confirmingDate || !confirm("Remover este jogador da fila de espera?")) return
+    await peladaService.sairFilaEspera(peladaId, userId, confirmingDate)
+    toast({ title: "Jogador removido da fila" })
+    await loadFilaEspera()
+  }
+
+  const handleSairDaFila = async () => {
+    if (!user || !confirmingDate) return
+    await peladaService.sairFilaEspera(peladaId, user.id, confirmingDate)
+    setMinhaPosicaoFila(0)
+    toast({ title: "Você saiu da fila de espera" })
+    await loadFilaEspera()
   }
 
   const confirmadosCount = confirmacoes.filter((c) => c.status === "confirmado").length
@@ -219,8 +286,10 @@ export default function PeladaDetailPage({ params }: Props) {
                   <ArrowLeft className="h-5 w-5" />
                 </Button>
               </Link>
-              <span className="text-2xl">⚽</span>
-              <span className="text-lg font-bold bg-gradient-to-r from-primary to-blue-600 bg-clip-text text-transparent">
+              <div className="w-7 h-7 rounded-md bg-[#00e676]/10 flex items-center justify-center">
+                <span className="text-sm">⚽</span>
+              </div>
+              <span className="text-lg font-bold bg-gradient-brand bg-clip-text text-transparent">
                 PeladaPro
               </span>
             </div>
@@ -244,23 +313,19 @@ export default function PeladaDetailPage({ params }: Props) {
         <PageTransition>
           {/* Hero Section */}
           <FadeIn>
-            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-dark to-dark-light border border-primary/20 p-8 mb-8">
-              <div className="absolute top-0 right-0 w-64 h-64 bg-primary/10 rounded-full blur-3xl" />
+            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#1a1a1a] to-[#121212] border border-[#00e676]/20 p-8 mb-8">
+              <div className="absolute top-0 right-0 w-64 h-64 bg-[#00e676]/10 rounded-full blur-3xl" />
               <div className="relative">
                 <div className="flex items-start justify-between">
                   <div>
                     <div className="flex items-center gap-2 mb-2">
-                      {isAdmin && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-500 text-xs font-medium">
-                          <Crown className="h-3 w-3" /> Admin
-                        </span>
-                      )}
+                      {isAdmin && <BadgeStatus type="admin" />}
                     </div>
-                    <h1 className="text-3xl sm:text-4xl font-bold text-white mb-2">
+                    <h1 className="text-3xl sm:text-4xl font-bold text-[#fafafa] mb-2">
                       {pelada.nome}
                     </h1>
                     {pelada.descricao && (
-                      <p className="text-white/70 mb-4">{pelada.descricao}</p>
+                      <p className="text-[#6b7280] mb-4">{pelada.descricao}</p>
                     )}
                   </div>
                   <Button
@@ -275,26 +340,26 @@ export default function PeladaDetailPage({ params }: Props) {
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6">
-                  <div className="flex items-center gap-2 text-white/80">
-                    <Calendar className="h-4 w-4 text-primary" />
+                  <div className="flex items-center gap-2 text-[#a3a3a3]">
+                    <Calendar className="h-4 w-4 text-[#00e676]" />
                     <span className="text-sm">
                       {pelada.data
                         ? new Date(pelada.data).toLocaleDateString("pt-BR")
                         : "A definir"}
                     </span>
                   </div>
-                  <div className="flex items-center gap-2 text-white/80">
-                    <MapPin className="h-4 w-4 text-primary" />
+                  <div className="flex items-center gap-2 text-[#a3a3a3]">
+                    <MapPin className="h-4 w-4 text-[#00e676]" />
                     <span className="text-sm">{pelada.local || "A definir"}</span>
                   </div>
-                  <div className="flex items-center gap-2 text-white/80">
-                    <Users className="h-4 w-4 text-primary" />
+                  <div className="flex items-center gap-2 text-[#a3a3a3]">
+                    <Users className="h-4 w-4 text-[#00e676]" />
                     <span className="text-sm">
                       {participantes.length}/{pelada.limite_jogadores} jogadores
                     </span>
                   </div>
-                  <div className="flex items-center gap-2 text-white/80">
-                    <Shuffle className="h-4 w-4 text-primary" />
+                  <div className="flex items-center gap-2 text-[#a3a3a3]">
+                    <Shuffle className="h-4 w-4 text-[#00e676]" />
                     <span className="text-sm">
                       {pelada.numero_times}×{pelada.jogadores_por_time}
                     </span>
@@ -302,7 +367,7 @@ export default function PeladaDetailPage({ params }: Props) {
                 </div>
 
                 {/* Progress bar */}
-                <div className="mt-4 w-full h-2 rounded-full bg-white/10 overflow-hidden">
+                <div className="mt-4 w-full h-2 rounded-full bg-[#ffffff10] overflow-hidden">
                   <motion.div
                     initial={{ width: 0 }}
                     animate={{
@@ -310,7 +375,7 @@ export default function PeladaDetailPage({ params }: Props) {
                         (participantes.length / pelada.limite_jogadores) * 100
                       }%`,
                     }}
-                    className="h-full rounded-full bg-primary"
+                    className="h-full rounded-full bg-[#00e676]"
                   />
                 </div>
               </div>
@@ -321,65 +386,53 @@ export default function PeladaDetailPage({ params }: Props) {
             {/* Participants Section */}
             <div className="lg:col-span-2">
               <FadeIn>
-                <Card>
-                  <CardHeader
-                    className="cursor-pointer select-none"
+                <div className="rounded-xl bg-[#1a1a1a] border border-[#2a2a2a] overflow-hidden">
+                  <div
+                    className="flex items-center justify-between p-6 pb-4 cursor-pointer select-none"
                     onClick={() => setShowParticipants(!showParticipants)}
                   >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <CardTitle className="flex items-center gap-2">
-                          <Users className="h-5 w-5 text-primary" />
-                          Participantes
-                        </CardTitle>
-                        <CardDescription>
-                          {participantes.length} jogadores confirmados
-                        </CardDescription>
-                      </div>
-                      {showParticipants ? (
-                        <ChevronUp className="h-5 w-5 text-muted-foreground" />
-                      ) : (
-                        <ChevronDown className="h-5 w-5 text-muted-foreground" />
-                      )}
+                    <div>
+                      <h3 className="text-base font-semibold text-[#fafafa] flex items-center gap-2">
+                        <Users className="h-5 w-5 text-[#00e676]" />
+                        Participantes
+                      </h3>
+                      <p className="text-sm text-[#6b7280]">
+                        {participantes.length} jogadores
+                      </p>
                     </div>
-                  </CardHeader>
+                    {showParticipants ? (
+                      <ChevronUp className="h-5 w-5 text-[#6b7280]" />
+                    ) : (
+                      <ChevronDown className="h-5 w-5 text-[#6b7280]" />
+                    )}
+                  </div>
 
                   <AnimatePresence>
                     {showParticipants && (
-                      <CardContent>
-                        <StaggerContainer className="space-y-2">
+                      <div className="px-6 pb-6">
+                        <StaggerContainer className="space-y-1">
                           {participantes.map((participante, i) => (
                             <StaggerItem key={participante.id}>
                               <motion.div
                                 layout
-                                className="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors group"
+                                className="flex items-center justify-between p-3 rounded-lg bg-[#121212] border border-[#2a2a2a] hover:border-[#00e676]/10 transition-all duration-200 group"
                               >
                                 <div className="flex items-center gap-3">
                                   {participante.profile?.avatar_url ? (
-                                    <Avatar className="h-10 w-10 ring-2 ring-primary/10">
+                                    <Avatar className="h-10 w-10 ring-2 ring-[#00e676]/10">
                                       <AvatarImage src={participante.profile.avatar_url} />
                                     </Avatar>
                                   ) : (
                                     <AvatarPlaceholder name={participante.profile?.nome} size="md" />
                                   )}
-                                  <div>
-                                    <p className="font-medium text-sm">
+                                  <div className="flex items-center gap-2">
+                                    <p className="font-medium text-sm text-[#fafafa]">
                                       {participante.profile?.nome || "Jogador"}
                                       {participante.user_id === pelada.admin_id && (
-                                        <Crown className="inline h-3 w-3 text-yellow-500 ml-1" />
+                                        <BadgeStatus type="admin" className="ml-1" />
                                       )}
                                     </p>
-                                    <span
-                                      className={`text-xs font-medium ${
-                                        participante.tipo === "mensalista"
-                                          ? "text-primary"
-                                          : "text-muted-foreground"
-                                      }`}
-                                    >
-                                      {participante.tipo === "mensalista"
-                                        ? "Mensalista"
-                                        : "Diarista"}
-                                    </span>
+                                    <BadgeStatus type={participante.tipo} />
                                   </div>
                                 </div>
 
@@ -396,7 +449,7 @@ export default function PeladaDetailPage({ params }: Props) {
                                           )
                                         }
                                       >
-                                        <SelectTrigger className="h-8 w-32 text-xs">
+                                        <SelectTrigger className="h-8 w-28 text-xs bg-[#1a1a1a] border-[#2a2a2a]">
                                           <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -418,7 +471,7 @@ export default function PeladaDetailPage({ params }: Props) {
                                           )
                                         }
                                       >
-                                        <UserMinus className="h-4 w-4 text-destructive" />
+                                        <UserMinus className="h-4 w-4 text-[#ff5252]" />
                                       </Button>
                                     </div>
                                   )}
@@ -434,10 +487,10 @@ export default function PeladaDetailPage({ params }: Props) {
                             />
                           )}
                         </StaggerContainer>
-                      </CardContent>
+                      </div>
                     )}
                   </AnimatePresence>
-                </Card>
+                </div>
               </FadeIn>
             </div>
 
@@ -445,30 +498,30 @@ export default function PeladaDetailPage({ params }: Props) {
             <div className="space-y-6">
               {/* Confirm Presence */}
               <FadeIn delay={0.1}>
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <CheckCircle2 className="h-5 w-5 text-primary" />
+                <div className="rounded-xl bg-[#1a1a1a] border border-[#2a2a2a]">
+                  <div className="p-6 pb-4">
+                    <h3 className="text-base font-semibold text-[#fafafa] flex items-center gap-2">
+                      <CheckCircle2 className="h-5 w-5 text-[#00e676]" />
                       Confirmar Presença
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
+                    </h3>
+                  </div>
+                  <div className="px-6 pb-6 space-y-4">
                     <div className="space-y-2">
-                      <label className="text-sm text-muted-foreground">
+                      <label className="text-sm text-[#6b7280]">
                         Data do jogo
                       </label>
                       <input
                         type="date"
                         value={confirmingDate}
                         onChange={(e) => setConfirmingDate(e.target.value)}
-                        className="w-full h-10 rounded-lg border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all"
+                        className="w-full h-10 rounded-lg border border-[#2a2a2a] bg-[#121212] px-3 text-sm text-[#fafafa] focus:outline-none focus:ring-2 focus:ring-[#00e676] transition-all"
                       />
                     </div>
 
                     <div className="flex gap-2">
                       <Button
                         onClick={handleConfirmarPresenca}
-                        variant="gradient"
+                        variant="glow"
                         size="sm"
                         className="flex-1"
                         disabled={!confirmingDate}
@@ -483,7 +536,7 @@ export default function PeladaDetailPage({ params }: Props) {
                         className="flex-1"
                         disabled={!confirmingDate}
                       >
-                        <XCircle className="mr-1 h-4 w-4 text-destructive" />
+                        <XCircle className="mr-1 h-4 w-4 text-[#ff5252]" />
                         Recusar
                       </Button>
                     </div>
@@ -491,23 +544,23 @@ export default function PeladaDetailPage({ params }: Props) {
                     {/* Status Summary */}
                     {showConfirmacoes && (
                       <div className="space-y-2 text-sm">
-                        <div className="flex items-center justify-between p-2 rounded-lg bg-primary/5">
-                          <span className="flex items-center gap-1">
-                            <CheckCircle2 className="h-4 w-4 text-primary" />
+                        <div className="flex items-center justify-between p-2 rounded-lg bg-[#00e676]/5 border border-[#00e676]/10">
+                          <span className="flex items-center gap-1 text-[#00e676]">
+                            <CheckCircle2 className="h-4 w-4" />
                             Confirmados
                           </span>
-                          <span className="font-semibold text-primary">{confirmadosCount}</span>
+                          <span className="font-semibold text-[#00e676]">{confirmadosCount}</span>
                         </div>
-                        <div className="flex items-center justify-between p-2 rounded-lg bg-destructive/5">
-                          <span className="flex items-center gap-1">
-                            <XCircle className="h-4 w-4 text-destructive" />
+                        <div className="flex items-center justify-between p-2 rounded-lg bg-[#ff5252]/5 border border-[#ff5252]/10">
+                          <span className="flex items-center gap-1 text-[#ff5252]">
+                            <XCircle className="h-4 w-4" />
                             Recusados
                           </span>
-                          <span className="font-semibold text-destructive">{recusadosCount}</span>
+                          <span className="font-semibold text-[#ff5252]">{recusadosCount}</span>
                         </div>
-                        <div className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
-                          <span className="flex items-center gap-1">
-                            <Users className="h-4 w-4 text-muted-foreground" />
+                        <div className="flex items-center justify-between p-2 rounded-lg bg-[#6b7280]/5 border border-[#2a2a2a]">
+                          <span className="flex items-center gap-1 text-[#6b7280]">
+                            <Users className="h-4 w-4" />
                             Pendentes
                           </span>
                           <span className="font-semibold">{pendentes}</span>
@@ -517,8 +570,8 @@ export default function PeladaDetailPage({ params }: Props) {
 
                     {/* Admin Check-in Panel */}
                     {isAdmin && showConfirmacoes && confirmadosCount > 0 && (
-                      <div className="border-t border-border pt-4 mt-2">
-                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
+                      <div className="border-t border-[#2a2a2a] pt-4 mt-2">
+                        <p className="text-xs font-medium text-[#6b7280] uppercase tracking-wider mb-3">
                           Ordem de Chegada
                         </p>
                         <div className="space-y-2">
@@ -528,7 +581,7 @@ export default function PeladaDetailPage({ params }: Props) {
                             .map((conf) => (
                               <div
                                 key={conf.id}
-                                className="flex items-center justify-between p-2 rounded-lg bg-muted/30"
+                                className="flex items-center justify-between p-2 rounded-lg bg-[#121212] border border-[#2a2a2a]"
                               >
                                 <div className="flex items-center gap-2">
                                   {conf.profile?.avatar_url ? (
@@ -538,10 +591,10 @@ export default function PeladaDetailPage({ params }: Props) {
                                   ) : (
                                     <AvatarPlaceholder name={conf.profile?.nome} size="sm" />
                                   )}
-                                  <span className="text-xs">{conf.profile?.nome}</span>
+                                  <span className="text-xs text-[#fafafa]">{conf.profile?.nome}</span>
                                 </div>
                                 {conf.ordem_chegada ? (
-                                  <span className="text-xs font-medium text-primary">
+                                  <span className="text-xs font-medium text-[#00e676]">
                                     {conf.ordem_chegada}º
                                   </span>
                                 ) : (
@@ -564,21 +617,220 @@ export default function PeladaDetailPage({ params }: Props) {
                         </div>
                       </div>
                     )}
-                  </CardContent>
-                </Card>
+
+                    {/* Promoção automática notification */}
+                    {promovidoInfo && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        className="mt-3 p-3 rounded-lg bg-[#00e676]/10 border border-[#00e676]/20 text-sm"
+                      >
+                        <p className="font-medium flex items-center gap-1 text-[#00e676]">
+                          <ArrowUp className="h-4 w-4" />
+                          <span>{promovidoInfo.nome} foi promovido da fila!</span>
+                        </p>
+                        <button
+                          onClick={() => setPromovidoInfo(null)}
+                          className="text-xs text-[#6b7280] mt-1 hover:underline"
+                        >
+                          Dispensar
+                        </button>
+                      </motion.div>
+                    )}
+                  </div>
+                </div>
               </FadeIn>
 
               {/* Sorteio */}
+              {/* Waiting List Section */}
+              {showFila && (
+                <FadeIn delay={0.15}>
+                  <div className="rounded-xl bg-[#1a1a1a] border border-[#ffab00]/20 overflow-hidden">
+                    <div
+                      className="flex items-center justify-between p-6 pb-4 cursor-pointer select-none"
+                      onClick={() => setShowFila(!showFila)}
+                    >
+                      <div>
+                        <h3 className="text-base font-semibold text-[#fafafa] flex items-center gap-2">
+                          <ListOrdered className="h-5 w-5 text-[#ffab00]" />
+                          Lista de Espera
+                          {filaEspera.length > 0 && (
+                            <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full bg-[#ffab00]/10 text-[#ffab00] text-xs font-bold">
+                              {filaEspera.length}
+                            </span>
+                          )}
+                        </h3>
+                        <p className="text-sm text-[#6b7280]">
+                          {filaEspera.length > 0
+                            ? `${filaEspera.length} jogador${filaEspera.length > 1 ? "es" : ""} aguardando vaga`
+                            : "Nenhum jogador na fila"}
+                        </p>
+                      </div>
+                      {showFila ? (
+                        <ChevronUp className="h-4 w-4 text-[#6b7280]" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4 text-[#6b7280]" />
+                      )}
+                    </div>
+
+                    <AnimatePresence>
+                      {showFila && (
+                        <div className="px-6 pb-6 space-y-3">
+                          {filaEspera.length === 0 ? (
+                            <div className="text-center py-6">
+                              <ListOrdered className="h-8 w-8 text-[#6b7280]/50 mx-auto mb-2" />
+                              <p className="text-xs text-[#6b7280]">
+                                Fila vazia. Quando a pelada lotar,
+                                os diaristas excedentes entram aqui.
+                              </p>
+                            </div>
+                          ) : (
+                            <>
+                              {/* Minha posição na fila */}
+                              {!isAdmin && minhaPosicaoFila > 0 && (
+                                <motion.div
+                                  initial={{ scale: 0.95, opacity: 0 }}
+                                  animate={{ scale: 1, opacity: 1 }}
+                                  transition={{ type: "spring" }}
+                                  className="p-4 rounded-lg bg-gradient-to-br from-[#ffab00]/5 to-[#ffab00]/10 border border-[#ffab00]/20 text-center"
+                                >
+                                  <p className="text-xs text-[#ffab00]/80 mb-2">
+                                    Sua posição na fila
+                                  </p>
+                                  <motion.div
+                                    animate={{
+                                      scale: [1, 1.1, 1],
+                                    }}
+                                    transition={{ duration: 2, repeat: Infinity }}
+                                    className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-[#ffab00]/10 text-[#ffab00] text-2xl font-bold mb-2"
+                                  >
+                                    {minhaPosicaoFila}º
+                                  </motion.div>
+                                  <p className="text-xs text-[#6b7280]">
+                                    {minhaPosicaoFila === 1
+                                      ? "🔥 Você é o próximo! Quando alguém desistir, entra automaticamente."
+                                      : `${minhaPosicaoFila} pessoas na sua frente.`}
+                                  </p>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="mt-2 h-7 text-xs text-[#ff5252] hover:text-[#ff5252]"
+                                    onClick={handleSairDaFila}
+                                  >
+                                    Sair da fila
+                                  </Button>
+                                </motion.div>
+                              )}
+
+                              {/* Fila progress bar */}
+                              <div className="w-full h-1.5 rounded-full bg-[#2a2a2a] overflow-hidden">
+                                <motion.div
+                                  initial={{ width: 0 }}
+                                  animate={{
+                                    width: `${Math.min((filaEspera.length / 10) * 100, 100)}%`,
+                                  }}
+                                  className="h-full rounded-full bg-[#ffab00]"
+                                />
+                              </div>
+
+                              {/* Lista da fila */}
+                              <div className="space-y-1">
+                                {filaEspera.map((item) => (
+                                  <motion.div
+                                    key={item.id}
+                                    layout
+                                    initial={{ opacity: 0, x: -10 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    className="flex items-center justify-between p-2.5 rounded-lg bg-[#121212] border border-[#2a2a2a] hover:border-[#ffab00]/20 transition-all duration-200 group"
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <motion.span
+                                        whileHover={{ scale: 1.2 }}
+                                        className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                                          item.posicao === 1
+                                            ? "bg-[#ffab00] text-[#0a0a0a]"
+                                            : item.posicao <= 3
+                                            ? "bg-[#ffab00]/10 text-[#ffab00]"
+                                            : "bg-[#2a2a2a] text-[#6b7280]"
+                                        }`}
+                                      >
+                                        {item.posicao}
+                                      </motion.span>
+                                      {item.profile?.avatar_url ? (
+                                        <Avatar className="h-7 w-7">
+                                          <AvatarImage src={item.profile.avatar_url} />
+                                        </Avatar>
+                                      ) : (
+                                        <AvatarPlaceholder name={item.profile?.nome} size="sm" />
+                                      )}
+                                      <span className="text-xs font-medium text-[#fafafa]">
+                                        {item.profile?.nome}
+                                      </span>
+                                      {item.prioridade === "mensalista" && (
+                                        <BadgeStatus type="mensalista" />
+                                      )}
+                                    </div>
+
+                                    {/* Admin actions */}
+                                    {isAdmin && (
+                                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-7 w-7"
+                                          onClick={() =>
+                                            handlePromoverDaFila(item.user_id)
+                                          }
+                                          title="Promover da fila"
+                                        >
+                                          <UserPlus className="h-3.5 w-3.5 text-[#00e676]" />
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-7 w-7"
+                                          onClick={() =>
+                                            handleRemoverDaFila(item.user_id)
+                                          }
+                                          title="Remover da fila"
+                                        >
+                                          <XCircle className="h-3.5 w-3.5 text-[#ff5252]" />
+                                        </Button>
+                                      </div>
+                                    )}
+                                  </motion.div>
+                                ))}
+                              </div>
+
+                              {/* Summary */}
+                              <div className="flex items-center justify-between text-xs text-[#6b7280] pt-2 border-t border-[#2a2a2a]">
+                                <span>
+                                  {filaEspera.length} jogador{filaEspera.length > 1 ? "es" : ""} na fila
+                                </span>
+                                <span>
+                                  Limite: {participantes.length}/{pelada.limite_jogadores}
+                                </span>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </FadeIn>
+              )}
+
+              {/* Sorteio */}
               <FadeIn delay={0.2}>
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <Shuffle className="h-5 w-5 text-primary" />
+                <div className="rounded-xl bg-[#1a1a1a] border border-[#2a2a2a]">
+                  <div className="p-6 pb-4">
+                    <h3 className="text-base font-semibold text-[#fafafa] flex items-center gap-2">
+                      <Shuffle className="h-5 w-5 text-[#00e676]" />
                       Sorteio de Times
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <p className="text-sm text-muted-foreground">
+                    </h3>
+                  </div>
+                  <div className="px-6 pb-6 space-y-4">
+                    <p className="text-sm text-[#6b7280]">
                       {isAdmin
                         ? "Clique abaixo para realizar o sorteio dos times com os jogadores confirmados."
                         : "O admin irá realizar o sorteio dos times."}
@@ -586,57 +838,57 @@ export default function PeladaDetailPage({ params }: Props) {
 
                     {isAdmin && (
                       <Link href={`/pelada/sorteio/${pelada.id}`}>
-                        <Button variant="gradient" className="w-full">
+                        <Button variant="glow" className="w-full">
                           <Shuffle className="mr-2 h-4 w-4" />
                           Realizar Sorteio
                         </Button>
                       </Link>
                     )}
-                  </CardContent>
-                </Card>
+                  </div>
+                </div>
               </FadeIn>
 
               {/* Info */}
               <FadeIn delay={0.3}>
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <Settings2 className="h-5 w-5 text-primary" />
+                <div className="rounded-xl bg-[#1a1a1a] border border-[#2a2a2a]">
+                  <div className="p-6 pb-4">
+                    <h3 className="text-base font-semibold text-[#fafafa] flex items-center gap-2">
+                      <Settings2 className="h-5 w-5 text-[#00e676]" />
                       Detalhes
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3 text-sm">
+                    </h3>
+                  </div>
+                  <div className="px-6 pb-6 space-y-3 text-sm">
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Criada em</span>
-                      <span>
+                      <span className="text-[#6b7280]">Criada em</span>
+                      <span className="text-[#fafafa]">
                         {new Date(pelada.created_at).toLocaleDateString("pt-BR")}
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Times</span>
-                      <span>{pelada.numero_times}</span>
+                      <span className="text-[#6b7280]">Times</span>
+                      <span className="text-[#fafafa]">{pelada.numero_times}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Jog/Time</span>
-                      <span>{pelada.jogadores_por_time}</span>
+                      <span className="text-[#6b7280]">Jog/Time</span>
+                      <span className="text-[#fafafa]">{pelada.jogadores_por_time}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Vagas</span>
-                      <span>
+                      <span className="text-[#6b7280]">Vagas</span>
+                      <span className="text-[#fafafa]">
                         {participantes.length}/{pelada.limite_jogadores}
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Link</span>
+                      <span className="text-[#6b7280]">Link</span>
                       <button
                         onClick={handleCopyLink}
-                        className="text-primary hover:underline"
+                        className="text-[#00e676] hover:underline"
                       >
                         Copiar
                       </button>
                     </div>
-                  </CardContent>
-                </Card>
+                  </div>
+                </div>
               </FadeIn>
             </div>
           </div>

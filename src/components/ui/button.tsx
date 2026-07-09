@@ -3,24 +3,26 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 active:scale-[0.98]",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00e676] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 active:scale-[0.98]",
   {
     variants: {
       variant: {
         default:
-          "bg-primary text-white shadow-sm hover:bg-primary-dark hover:shadow-md",
+          "bg-[#00e676] text-[#0a0a0a] font-semibold shadow-sm hover:bg-[#00c853] hover:shadow-md hover:shadow-[#00e676]/20",
         destructive:
-          "bg-destructive text-white shadow-sm hover:bg-red-600 hover:shadow-md",
+          "bg-[#ff5252] text-white shadow-sm hover:bg-red-600 hover:shadow-md",
         outline:
-          "border border-border bg-background shadow-sm hover:bg-muted hover:text-accent",
+          "border border-[#2a2a2a] bg-transparent shadow-sm hover:bg-[#1a1a1a] hover:text-[#fafafa]",
         secondary:
-          "bg-accent text-accent-foreground shadow-sm hover:bg-accent/90 hover:shadow-md",
+          "bg-[#1a1a1a] text-[#a3a3a3] shadow-sm hover:bg-[#242424] hover:text-[#fafafa] hover:shadow-md",
         ghost:
-          "hover:bg-muted hover:text-accent",
+          "hover:bg-[#1a1a1a] hover:text-[#fafafa]",
         link:
-          "text-primary underline-offset-4 hover:underline",
+          "text-[#00e676] underline-offset-4 hover:underline",
         gradient:
-          "bg-gradient-to-r from-primary to-blue-600 text-white shadow-sm hover:shadow-md hover:scale-[1.02]",
+          "bg-gradient-to-r from-[#00e676] to-[#00c853] text-[#0a0a0a] font-semibold shadow-sm hover:shadow-md hover:shadow-[#00e676]/25 hover:scale-[1.02]",
+        glow:
+          "bg-[#00e676] text-[#0a0a0a] font-semibold shadow-[0_0_20px_rgba(0,230,118,0.25)] hover:shadow-[0_0_30px_rgba(0,230,118,0.4)] hover:scale-[1.02] transition-all",
       },
       size: {
         default: "h-10 px-4 py-2",

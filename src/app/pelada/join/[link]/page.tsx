@@ -7,7 +7,7 @@ import { motion } from "framer-motion"
 import { useSupabase } from "@/lib/supabase/supabase-provider"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarImage } from "@/components/ui/avatar"
 import { PageTransition, FadeIn } from "@/components/layout/motion-wrapper"
 import { toast } from "@/components/ui/toaster"
 import { PeladaService } from "@/services/pelada-service"
@@ -21,6 +21,7 @@ import {
   XCircle,
   LogIn,
   ArrowRight,
+  ListOrdered,
 } from "lucide-react"
 import type { Pelada } from "@/types"
 
@@ -39,6 +40,9 @@ export default function JoinPeladaPage({ params }: Props) {
   const [peladaFull, setPeladaFull] = useState(false)
   const [participantCount, setParticipantCount] = useState(0)
   const [link, setLink] = useState<string>("")
+  const [filaCount, setFilaCount] = useState(0)
+  const [enteredFila, setEnteredFila] = useState(false)
+  const [filaPosicao, setFilaPosicao] = useState(0)
 
   useEffect(() => {
     params.then((p) => setLink(p.link))
@@ -92,6 +96,57 @@ export default function JoinPeladaPage({ params }: Props) {
     } catch (error) {
       toast({
         title: "Erro ao entrar",
+        description: error instanceof Error ? error.message : "Erro desconhecido",
+        variant: "destructive",
+      })
+    } finally {
+      setJoining(false)
+    }
+  }
+
+  const handleEntrarFila = async () => {
+    if (!user || !pelada || !pelada.data) return
+    setJoining(true)
+    try {
+      // Primeiro adiciona como participante
+      const success = await peladaService.addParticipante(pelada.id, user.id)
+      if (!success) {
+        toast({
+          title: "Erro ao entrar",
+          description: "Não foi possível entrar na pelada.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      // Depois tenta confirmar presença (vai para fila se lotado)
+      const dataJogo = pelada.data.split("T")[0]
+      const result = await peladaService.confirmarPresenca(pelada.id, user.id, dataJogo)
+
+      if (result.status === "fila") {
+        setEnteredFila(true)
+        setFilaPosicao(result.posicao || 0)
+        setIsParticipant(true)
+        toast({
+          title: "Você entrou na fila de espera!",
+          description: `Sua posição: ${result.posicao}º — Quando abrir vaga, você será chamado automaticamente.`,
+          variant: "success",
+        })
+        // Carregar contagem atualizada da fila
+        const fila = await peladaService.getFilaEspera(pelada.id, dataJogo)
+        setFilaCount(fila.length)
+      } else {
+        setIsParticipant(true)
+        setParticipantCount((prev) => prev + 1)
+        toast({
+          title: "Você entrou na pelada! 🎉",
+          description: `Agora você faz parte de "${pelada.nome}"`,
+          variant: "success",
+        })
+      }
+    } catch (error) {
+      toast({
+        title: "Erro ao entrar na fila",
         description: error instanceof Error ? error.message : "Erro desconhecido",
         variant: "destructive",
       })
@@ -261,14 +316,53 @@ export default function JoinPeladaPage({ params }: Props) {
                   </Button>
                 </Link>
               </div>
-            ) : peladaFull ? (
-              <div className="text-center space-y-3">
+            ) : peladaFull && !enteredFila ? (
+              <div className="text-center space-y-4">
                 <XCircle className="h-12 w-12 text-destructive mx-auto" />
                 <p className="text-sm text-muted-foreground">
                   Pelada lotada! O limite de {pelada.limite_jogadores} jogadores
                   já foi atingido.
                 </p>
+                {pelada.data && (
+                  <Button
+                    onClick={handleEntrarFila}
+                    variant="outline"
+                    size="lg"
+                    className="w-full"
+                    disabled={joining}
+                  >
+                    {joining ? (
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    ) : (
+                      <ListOrdered className="mr-2 h-5 w-5" />
+                    )}
+                    Entrar na lista de espera
+                  </Button>
+                )}
               </div>
+            ) : enteredFila ? (
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="text-center space-y-3"
+              >
+                <ListOrdered className="h-12 w-12 text-primary mx-auto" />
+                <p className="font-semibold text-lg">Você está na fila de espera!</p>
+                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 text-primary text-2xl font-bold">
+                  {filaPosicao}º
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {filaPosicao === 1
+                    ? "Você é o próximo! Quando alguém desistir, entra automaticamente."
+                    : `Você está em ${filaPosicao}º lugar na fila. Quando sua vez chegar, você será notificado.`}
+                </p>
+                <Link href={`/pelada/${pelada.id}`}>
+                  <Button variant="gradient" size="lg" className="w-full">
+                    Ver detalhes
+                    <ArrowRight className="ml-2 h-5 w-5" />
+                  </Button>
+                </Link>
+              </motion.div>
             ) : (
               <Button
                 onClick={handleJoin}

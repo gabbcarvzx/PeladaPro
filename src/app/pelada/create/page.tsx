@@ -115,8 +115,10 @@ export default function CreatePeladaPage() {
                   <ArrowLeft className="h-5 w-5" />
                 </Button>
               </Link>
-              <span className="text-2xl">⚽</span>
-              <span className="text-lg font-bold bg-gradient-to-r from-primary to-blue-600 bg-clip-text text-transparent">
+              <div className="w-7 h-7 rounded-md bg-[#00e676]/10 flex items-center justify-center">
+                <span className="text-sm">⚽</span>
+              </div>
+              <span className="text-lg font-bold bg-gradient-brand bg-clip-text text-transparent">
                 PeladaPro
               </span>
             </div>
@@ -287,8 +289,8 @@ export default function CreatePeladaPage() {
                       animate={{ opacity: 1, y: 0 }}
                       className={`mt-4 p-4 rounded-lg ${
                         capacidadeOk
-                          ? "bg-primary/5 border border-primary/20"
-                          : "bg-destructive/5 border border-destructive/20"
+                          ? "bg-[#00e676]/5 border border-[#00e676]/20"
+                          : "bg-[#ff5252]/5 border border-[#ff5252]/20"
                       }`}
                     >
                       <div className="flex items-center justify-between text-sm">
@@ -297,14 +299,14 @@ export default function CreatePeladaPage() {
                         </span>
                         <span
                           className={`font-semibold ${
-                            capacidadeOk ? "text-primary" : "text-destructive"
+                            capacidadeOk ? "text-[#00e676]" : "text-[#ff5252]"
                           }`}
                         >
                           {capacidadeTimes} vagas em {totalJogadores} jogadores
                         </span>
                       </div>
                       {!capacidadeOk && (
-                        <p className="text-xs text-destructive mt-1">
+                        <p className="text-xs text-[#ff5252] mt-1">
                           A capacidade dos times ({capacidadeTimes}) excede o limite de
                           jogadores ({totalJogadores}). Ajuste os valores.
                         </p>

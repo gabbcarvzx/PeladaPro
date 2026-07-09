@@ -133,8 +133,10 @@ export default function ProfilePage() {
                   <ArrowLeft className="h-5 w-5" />
                 </Button>
               </Link>
-              <span className="text-2xl">⚽</span>
-              <span className="text-lg font-bold bg-gradient-to-r from-primary to-blue-600 bg-clip-text text-transparent">
+              <div className="w-7 h-7 rounded-md bg-[#00e676]/10 flex items-center justify-center">
+                <span className="text-sm">⚽</span>
+              </div>
+              <span className="text-lg font-bold bg-gradient-brand bg-clip-text text-transparent">
                 PeladaPro
               </span>
             </div>
