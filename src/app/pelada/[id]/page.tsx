@@ -124,7 +124,7 @@ export default function PeladaDetailPage({ params }: Props) {
 
   const handleCopyLink = () => {
     if (!pelada) return
-    const link = `${window.location.origin}/pelada/join/${pelada.link_convite}`
+    const link = `${window.location.origin}/pelada/entrar/${pelada.invite_code}`
     navigator.clipboard.writeText(link)
     toast({
       title: "Link copiado!",

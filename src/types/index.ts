@@ -30,6 +30,7 @@ export interface Pelada {
   nome: string
   descricao: string | null
   link_convite: string
+  invite_code: string
   admin_id: string
   limite_jogadores: number
   numero_times: number
@@ -39,6 +40,7 @@ export interface Pelada {
   recorrente: boolean
   dia_semana: number | null
   horario: string | null
+  is_public: boolean
   created_at: string
 }
 

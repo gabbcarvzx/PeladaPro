@@ -40,6 +40,7 @@ export class PeladaService {
         data: data.data,
         admin_id: data.admin_id,
         link_convite,
+        invite_code: link_convite,
         recorrente: data.recorrente || false,
         dia_semana: data.dia_semana || null,
         horario: data.horario || null,
@@ -144,6 +145,17 @@ export class PeladaService {
   }
 
   /**
+   * Busca pelada por invite_code público (usa security definer function para bypassar RLS)
+   */
+  async getByInviteCode(inviteCode: string): Promise<Pelada | null> {
+    const { data } = await this.supabase.rpc("buscar_por_invite_code", {
+      p_invite_code: inviteCode,
+    })
+
+    return (data as Pelada) || null
+  }
+
+  /**
    * Atualiza uma pelada
    */
   async update(peladaId: string, updates: Partial<Pelada>): Promise<Pelada | null> {
@@ -232,7 +244,8 @@ export class PeladaService {
   }
 
   /**
-   * Adiciona participante a uma pelada (via link de convite)
+   * Adiciona participante a uma pelada (via link de convite).
+   * Retorna false se a pelada estiver lotada.
    */
   async addParticipante(peladaId: string, userId: string): Promise<boolean> {
     // Verificar se a pelada tem vagas
@@ -242,6 +255,19 @@ export class PeladaService {
     const participantes = await this.getParticipantes(peladaId)
     if (participantes.length >= pelada.limite_jogadores) return false
 
+    const { error } = await this.supabase.from("pelada_participantes").insert({
+      pelada_id: peladaId,
+      user_id: userId,
+    })
+
+    return !error
+  }
+
+  /**
+   * Adiciona um membro à pelada independentemente do limite de vagas.
+   * Usado no fluxo de convite quando a pelada está lotada.
+   */
+  async adicionarMembro(peladaId: string, userId: string): Promise<boolean> {
     const { error } = await this.supabase.from("pelada_participantes").insert({
       pelada_id: peladaId,
       user_id: userId,
