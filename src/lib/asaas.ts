@@ -19,7 +19,7 @@ interface AsaasCustomer {
 interface AsaasSubscription {
   id: string
   customer: string
-  billingType: "PIX" | "BOLETO" | "CREDIT_CARD"
+  billingType: "PIX" | "BOLETO" | "CREDIT_CARD" | "UNDEFINED"
   value: number
   nextDueDate: string
   cycle: "WEEKLY" | "BIWEEKLY" | "MONTHLY" | "BIMONTHLY" | "QUARTERLY" | "SEMIANNUALLY" | "ANNUALLY"
@@ -75,10 +75,23 @@ async function fetchAsaas<T>(path: string, options: RequestInit = {}): Promise<T
 export async function createAsaasCustomer(data: {
   name: string
   email: string
-  cpfCnpj?: string
-  phone?: string
+  cpfCnpj: string
+  phone: string
 }): Promise<AsaasCustomer> {
   return fetchAsaas<AsaasCustomer>("/customers", {
+    method: "POST",
+    body: JSON.stringify(data),
+  })
+}
+
+/**
+ * Atualiza um customer existente no Asaas (ex: para adicionar CPF)
+ */
+export async function updateAsaasCustomer(
+  customerId: string,
+  data: { cpfCnpj?: string; phone?: string; name?: string },
+): Promise<AsaasCustomer> {
+  return fetchAsaas<AsaasCustomer>(`/customers/${customerId}`, {
     method: "POST",
     body: JSON.stringify(data),
   })
@@ -99,7 +112,7 @@ export async function createAsaasSubscription(data: {
   customerId: string
   value: number
   description?: string
-  billingType?: "PIX" | "BOLETO" | "CREDIT_CARD"
+  billingType?: "PIX" | "BOLETO" | "CREDIT_CARD" | "UNDEFINED"
   nextDueDate?: string
 }): Promise<AsaasSubscription> {
   return fetchAsaas<AsaasSubscription>("/subscriptions", {
@@ -108,7 +121,7 @@ export async function createAsaasSubscription(data: {
       customer: data.customerId,
       value: data.value,
       description: data.description || "PeladaPro - Plano Mensal",
-      billingType: data.billingType || "PIX",
+      billingType: "UNDEFINED",
       cycle: "MONTHLY",
       nextDueDate: data.nextDueDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
     }),

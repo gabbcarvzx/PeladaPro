@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Logo } from "@/components/ui/logo"
 import { PageTransition, FadeIn } from "@/components/layout/motion-wrapper"
-import { toast } from "@/components/ui/toaster"
 import { SubscriptionService } from "@/services/subscription-service"
 import {
   Loader2,
@@ -24,6 +23,7 @@ import {
   Sparkles,
   CreditCard,
 } from "lucide-react"
+import { PreCheckoutModal } from "@/components/checkout/pre-checkout-modal"
 
 export default function PlanosPage() {
   const router = useRouter()
@@ -32,7 +32,7 @@ export default function PlanosPage() {
   const [subStatus, setSubStatus] = useState<string>("none")
   const [graceUntil, setGraceUntil] = useState<string | null>(null)
   const [loadingSub, setLoadingSub] = useState(true)
-  const [checkoutLoading, setCheckoutLoading] = useState(false)
+  const [showPreCheckout, setShowPreCheckout] = useState(false)
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -52,33 +52,10 @@ export default function PlanosPage() {
     setLoadingSub(false)
   }
 
-  const handleAssinar = async () => {
+  const handleAssinar = () => {
     if (!user) return
-    setCheckoutLoading(true)
-
-    try {
-      // Chama API route segura (server-side) para gerar o checkout
-      const response = await fetch("/api/asaas/checkout", {
-        method: "POST",
-      })
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || "Erro ao gerar checkout")
-      }
-
-      const { url } = await response.json()
-      // Redireciona para o checkout Asaas
-      window.location.href = url
-    } catch (error) {
-      toast({
-        title: "Erro ao gerar checkout",
-        description: error instanceof Error ? error.message : "Erro desconhecido",
-        variant: "destructive",
-      })
-    } finally {
-      setCheckoutLoading(false)
-    }
+    // Abre o modal de pré-checkout para coletar CPF/CNPJ
+    setShowPreCheckout(true)
   }
 
   const isActive = subStatus === "active" || (subStatus === "past_due" && SubscriptionService.getDiasRestantes(graceUntil) > 0)
@@ -208,14 +185,9 @@ export default function PlanosPage() {
                       variant="glow"
                       size="lg"
                       className="w-full h-12 text-base"
-                      disabled={checkoutLoading}
                     >
-                      {checkoutLoading ? (
-                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                      ) : (
-                        <CreditCard className="mr-2 h-5 w-5" />
-                      )}
-                      {checkoutLoading ? "Redirecionando..." : "Assinar por R$ 30/mês"}
+                      <CreditCard className="mr-2 h-5 w-5" />
+                      Assinar por R$ 30/mês
                     </Button>
                   )}
 
@@ -241,6 +213,14 @@ export default function PlanosPage() {
           </FadeIn>
         </PageTransition>
       </main>
+
+      {/* Pré-checkout Modal */}
+      <PreCheckoutModal
+        open={showPreCheckout}
+        onClose={() => setShowPreCheckout(false)}
+        userEmail={user?.email || ""}
+        userName={profile?.nome || ""}
+      />
     </div>
   )
 }

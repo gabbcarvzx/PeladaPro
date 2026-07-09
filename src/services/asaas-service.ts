@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
-import { createAsaasCustomer, findAsaasCustomerByEmail, createAsaasSubscription, createAsaasCheckout, cancelAsaasSubscription } from "@/lib/asaas"
+import { createAsaasCustomer, updateAsaasCustomer, findAsaasCustomerByEmail, createAsaasSubscription, createAsaasCheckout, cancelAsaasSubscription } from "@/lib/asaas"
 import { SubscriptionService } from "./subscription-service"
 
 export class AsaasService {
@@ -12,11 +12,9 @@ export class AsaasService {
   }
 
   /**
-   * Gera o checkout para assinatura do usuário.
-   * Cria customer no Asaas se necessário, cria assinatura, e retorna URL do checkout.
+   * Cria ou busca o customer Asaas e retorna o ID.
    */
-  async generateCheckout(userId: string, userEmail: string, userName: string): Promise<string> {
-    // 1. Verifica se já tem asaas_customer_id no profile
+  async getOrCreateCustomer(userId: string, userEmail: string, userName: string, cpfCnpj: string, phone: string): Promise<string> {
     const { data: profile } = await this.supabase
       .from("profiles")
       .select("asaas_customer_id")
@@ -25,30 +23,54 @@ export class AsaasService {
 
     let customerId = (profile as any)?.asaas_customer_id
 
-    // 2. Se não tem customer, cria no Asaas
     if (!customerId) {
+      // Cria customer NOVO com CPF/CNPJ obrigatório
       const customer = await createAsaasCustomer({
         name: userName,
         email: userEmail,
+        cpfCnpj,
+        phone,
       })
       customerId = customer.id
 
-      // Salva no profile
       await this.supabase
         .from("profiles")
         .update({ asaas_customer_id: customerId })
         .eq("id", userId)
+    } else if (cpfCnpj) {
+      // Customer já existe — atualiza com CPF/CNPJ (pode ter sido criado SEM CPF)
+      try {
+        await updateAsaasCustomer(customerId, { cpfCnpj, phone })
+      } catch {
+        // Se falhar, tenta criar novo customer (customer pode ter sido deletado no Asaas)
+        const customer = await createAsaasCustomer({
+          name: userName,
+          email: userEmail,
+          cpfCnpj,
+          phone,
+        })
+        customerId = customer.id
+
+        await this.supabase
+          .from("profiles")
+          .update({ asaas_customer_id: customerId })
+          .eq("id", userId)
+      }
     }
 
-    // 3. Cria ou atualiza subscription no banco
+    return customerId
+  }
+
+  /**
+   * Cria assinatura no Asaas e no banco, retorna URL do checkout.
+   */
+  async createSubscriptionAndCheckout(userId: string, customerId: string): Promise<string> {
     let subscriptionId: string
     const existing = await this.subscriptionService.getSubscription(userId)
 
     if (existing?.asaas_subscription_id) {
-      // Já tem assinatura no Asaas - usa ela
       subscriptionId = existing.asaas_subscription_id
     } else {
-      // Cria nova assinatura no Asaas
       const asaasSub = await createAsaasSubscription({
         customerId,
         value: 30.0,
@@ -58,9 +80,8 @@ export class AsaasService {
       subscriptionId = asaasSub.id
     }
 
-    // 4. Upsert subscription no banco
     const now = new Date().toISOString()
-    const graceDate = new Date(Date.now() + 33 * 24 * 60 * 60 * 1000).toISOString() // 30 dias + 3 de tolerância
+    const graceDate = new Date(Date.now() + 33 * 24 * 60 * 60 * 1000).toISOString()
 
     await this.supabase.from("subscriptions").upsert({
       user_id: userId,
@@ -75,7 +96,6 @@ export class AsaasService {
       onConflict: "user_id",
     })
 
-    // 5. Atualiza profile
     await this.supabase
       .from("profiles")
       .update({
@@ -84,7 +104,6 @@ export class AsaasService {
       })
       .eq("id", userId)
 
-    // 6. Gera URL do checkout
     const { url } = await createAsaasCheckout({
       subscriptionId,
       redirectUrl: `${process.env.NEXT_PUBLIC_APP_URL || ""}/dashboard`,
