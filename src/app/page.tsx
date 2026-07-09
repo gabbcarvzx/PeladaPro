@@ -4,6 +4,7 @@ import { motion } from "framer-motion"
 import Link from "next/link"
 import { FadeIn, StaggerContainer, StaggerItem } from "@/components/layout/motion-wrapper"
 import { Button } from "@/components/ui/button"
+import { Logo } from "@/components/ui/logo"
 import {
   Calendar,
   Users,
@@ -50,14 +51,9 @@ export default function Home() {
       <header className="fixed top-0 left-0 right-0 z-50 glass">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-md bg-[#00e676]/10 flex items-center justify-center">
-                <span className="text-sm">⚽</span>
-              </div>
-              <span className="text-xl font-bold bg-gradient-brand bg-clip-text text-transparent">
-                PeladaPro
-              </span>
-            </div>
+            <Link href="/" className="flex items-center">
+              <Logo size="sm" />
+            </Link>
             <nav className="flex items-center gap-4">
               <Link href="/auth/login">
                 <Button variant="ghost">Entrar</Button>

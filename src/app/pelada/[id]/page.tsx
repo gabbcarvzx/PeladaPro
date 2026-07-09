@@ -25,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Logo } from "@/components/ui/logo"
 import { PageTransition, FadeIn, StaggerContainer, StaggerItem } from "@/components/layout/motion-wrapper"
 import { toast } from "@/components/ui/toaster"
 import { PeladaService } from "@/services/pelada-service"
@@ -286,12 +287,7 @@ export default function PeladaDetailPage({ params }: Props) {
                   <ArrowLeft className="h-5 w-5" />
                 </Button>
               </Link>
-              <div className="w-7 h-7 rounded-md bg-[#00e676]/10 flex items-center justify-center">
-                <span className="text-sm">⚽</span>
-              </div>
-              <span className="text-lg font-bold bg-gradient-brand bg-clip-text text-transparent">
-                PeladaPro
-              </span>
+              <Logo />
             </div>
             <div className="flex items-center gap-2">
               {isAdmin && (

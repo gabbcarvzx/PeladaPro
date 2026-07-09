@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Avatar, AvatarImage } from "@/components/ui/avatar"
 import { AvatarPlaceholder } from "@/components/ui/avatar-placeholder"
+import { Logo } from "@/components/ui/logo"
 import { PageTransition, FadeIn } from "@/components/layout/motion-wrapper"
 import { toast } from "@/components/ui/toaster"
 import { AuthService } from "@/services/auth-service"
@@ -133,12 +134,7 @@ export default function ProfilePage() {
                   <ArrowLeft className="h-5 w-5" />
                 </Button>
               </Link>
-              <div className="w-7 h-7 rounded-md bg-[#00e676]/10 flex items-center justify-center">
-                <span className="text-sm">⚽</span>
-              </div>
-              <span className="text-lg font-bold bg-gradient-brand bg-clip-text text-transparent">
-                PeladaPro
-              </span>
+              <Logo />
             </div>
             <Button variant="ghost" size="icon" onClick={handleLogout}>
               <LogOut className="h-5 w-5" />

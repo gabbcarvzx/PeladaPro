@@ -7,6 +7,7 @@ import { motion } from "framer-motion"
 import { useSupabase } from "@/lib/supabase/supabase-provider"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Logo } from "@/components/ui/logo"
 import { PageTransition, FadeIn } from "@/components/layout/motion-wrapper"
 import { SkeletonCard } from "@/components/ui/skeleton"
 import { toast } from "@/components/ui/toaster"
@@ -88,14 +89,7 @@ export default function DashboardPage() {
       <header className="glass sticky top-0 z-50 border-b border-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-[#00e676]/10 flex items-center justify-center">
-                <span className="text-base">⚽</span>
-              </div>
-              <span className="text-lg font-bold bg-gradient-brand bg-clip-text text-transparent">
-                PeladaPro
-              </span>
-            </div>
+            <Logo />
 
             <div className="flex items-center gap-1">
               <Link href="/dashboard/profile">

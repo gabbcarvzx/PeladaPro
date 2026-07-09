@@ -12,38 +12,44 @@ interface BadgeStatusProps {
   animated?: boolean
 }
 
-const badgeConfig: Record<BadgeType, { label: string; classes: string; icon?: React.ReactNode }> = {
+// Padrão WCAG AA: texto escuro sobre bg colorido para máxima legibilidade
+type BadgeStyle = "solid" | "subtle"
+
+const badgeConfig: Record<BadgeType, { label: string; classes: string; icon?: React.ReactNode; style?: BadgeStyle }> = {
   mensalista: {
     label: "Mensalista",
-    classes: "bg-[#00e676]/10 text-[#00e676] border border-[#00e676]/20",
+    classes: "bg-[#22c55e] text-[#0a0a0a] font-bold border border-[#22c55e]",
     icon: <Zap className="w-3 h-3" />,
+    style: "solid",
   },
   diarista: {
     label: "Diarista",
-    classes: "bg-[#6b7280]/10 text-[#a3a3a3] border border-[#6b7280]/20",
+    classes: "bg-[#9ca3af]/20 text-[#9ca3af] border border-[#9ca3af]/30",
     icon: <Users className="w-3 h-3" />,
   },
   fila: {
     label: "Na Fila",
-    classes: "bg-[#ffab00]/10 text-[#ffab00] border border-[#ffab00]/20",
+    classes: "bg-[#f59e0b] text-[#0a0a0a] font-bold border border-[#f59e0b]",
     icon: <Clock className="w-3 h-3" />,
+    style: "solid",
   },
   admin: {
     label: "Admin",
-    classes: "bg-yellow-500/10 text-yellow-500 border border-yellow-500/20",
+    classes: "bg-[#eab308] text-[#0a0a0a] font-bold border border-[#eab308]",
     icon: <Crown className="w-3 h-3" />,
+    style: "solid",
   },
   confirmado: {
     label: "Confirmado",
-    classes: "bg-[#00e676]/10 text-[#00e676] border border-[#00e676]/20",
+    classes: "bg-[#22c55e]/15 text-[#22c55e] border border-[#22c55e]/25",
   },
   recusado: {
     label: "Recusado",
-    classes: "bg-[#ff5252]/10 text-[#ff5252] border border-[#ff5252]/20",
+    classes: "bg-[#ef4444]/15 text-[#ef4444] border border-[#ef4444]/25",
   },
   pendente: {
     label: "Pendente",
-    classes: "bg-[#6b7280]/10 text-[#a3a3a3] border border-[#6b7280]/20",
+    classes: "bg-[#9ca3af]/15 text-[#9ca3af] border border-[#9ca3af]/25",
   },
 }
 
