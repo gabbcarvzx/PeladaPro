@@ -44,6 +44,7 @@ export default function DashboardPage() {
   const [loadingPeladas, setLoadingPeladas] = useState(true)
   const [subStatus, setSubStatus] = useState<string>("none")
   const [diasTolerancia, setDiasTolerancia] = useState(0)
+  const [subExpiraEm, setSubExpiraEm] = useState<string | null>(null)
 
   useEffect(() => {
     if (!loading && !user) {
@@ -68,9 +69,10 @@ export default function DashboardPage() {
   const loadSubscription = async () => {
     if (!user) return
     const subService = new SubscriptionService(supabase)
-    const { status, graceUntil } = await subService.getUserSubscriptionStatus(user.id)
-    setSubStatus(status)
-    setDiasTolerancia(SubscriptionService.getDiasRestantes(graceUntil))
+    const details = await subService.getSubscriptionDetails(user.id)
+    setSubStatus(details.status)
+    setDiasTolerancia(details.diasRestantes)
+    setSubExpiraEm(details.currentPeriodEnd)
   }
 
   const handleLogout = async () => {
@@ -108,10 +110,16 @@ export default function DashboardPage() {
             <div className="flex items-center gap-1">
               {subStatus !== "none" && (
                 <Link href="/planos">
-                  <Button variant="ghost" size="sm" className={`gap-1.5 text-xs ${
-                    subStatus === "active" ? "text-[#00e676]" : "text-[#ffab00]"
-                  }`}>
-                    {subStatus === "active" ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={`gap-1.5 text-xs group relative ${
+                      subStatus === "active" || (subStatus === "past_due" && diasTolerancia > 0)
+                        ? "text-[#00e676]"
+                        : "text-[#ff5252]"
+                    }`}
+                  >
+                    {subStatus === "active" || (subStatus === "past_due" && diasTolerancia > 0) ? (
                       <CheckCircle2 className="h-3.5 w-3.5" />
                     ) : (
                       <CreditCard className="h-3.5 w-3.5" />
@@ -119,16 +127,32 @@ export default function DashboardPage() {
                     <span className="hidden sm:inline">
                       {subStatus === "active"
                         ? "Premium"
-                        : diasTolerancia > 0
-                        ? `${diasTolerancia}d tolerância`
+                        : subStatus === "past_due" && diasTolerancia > 0
+                        ? `${diasTolerancia}d`
                         : "Regularizar"}
                     </span>
+                    {/* Tooltip com detalhes */}
+                    <div className="absolute top-full mt-2 right-0 w-64 p-3 rounded-xl bg-[#1a1a1a] border border-[#2a2a2a] shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none z-50">
+                      <p className="text-xs font-medium text-[#fafafa] mb-2">
+                        {subStatus === "active" && "Assinatura Premium Ativa"}
+                        {subStatus === "past_due" && diasTolerancia > 0 && `Tolerância: ${diasTolerancia} dia(s)`}
+                        {subStatus === "past_due" && diasTolerancia <= 0 && "Assinatura vencida"}
+                        {subStatus === "pending" && "Pagamento pendente"}
+                        {subStatus === "canceled" && "Assinatura cancelada"}
+                      </p>
+                      {subExpiraEm && (
+                        <p className="text-xs text-[#6b7280]">
+                          {subStatus === "active" ? "Expira em" : "Vencimento"}: {SubscriptionService.formatarData(subExpiraEm)}
+                        </p>
+                      )}
+                      <p className="text-xs text-[#6b7280] mt-1">Clique para gerenciar</p>
+                    </div>
                   </Button>
                 </Link>
               )}
               {subStatus === "none" && (
                 <Link href="/planos">
-                  <Button variant="ghost" size="sm" className="gap-1.5 text-xs text-muted-foreground">
+                  <Button variant="ghost" size="sm" className="gap-1.5 text-xs text-muted-foreground group relative">
                     <CreditCard className="h-3.5 w-3.5" />
                     <span className="hidden sm:inline">Assinar</span>
                   </Button>

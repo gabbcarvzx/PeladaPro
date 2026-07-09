@@ -22,6 +22,11 @@ import {
   ArrowLeft,
   Sparkles,
   CreditCard,
+  Calendar,
+  Clock,
+  AlertTriangle,
+  XCircle,
+  RefreshCw,
 } from "lucide-react"
 import { PreCheckoutModal } from "@/components/checkout/pre-checkout-modal"
 
@@ -33,6 +38,14 @@ export default function PlanosPage() {
   const [graceUntil, setGraceUntil] = useState<string | null>(null)
   const [loadingSub, setLoadingSub] = useState(true)
   const [showPreCheckout, setShowPreCheckout] = useState(false)
+  const [subDetails, setSubDetails] = useState<{
+    status: string
+    graceUntil: string | null
+    currentPeriodEnd: string | null
+    lastPaymentAt: string | null
+    planPrice: number
+    diasRestantes: number
+  } | null>(null)
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -46,9 +59,10 @@ export default function PlanosPage() {
   }, [user])
 
   const loadSubscription = async () => {
-    const { status, graceUntil } = await subscriptionService.getUserSubscriptionStatus(user!.id)
-    setSubStatus(status)
-    setGraceUntil(graceUntil)
+    const details = await subscriptionService.getSubscriptionDetails(user!.id)
+    setSubDetails(details)
+    setSubStatus(details.status)
+    setGraceUntil(details.graceUntil)
     setLoadingSub(false)
   }
 
@@ -107,23 +121,162 @@ export default function PlanosPage() {
             </div>
           </FadeIn>
 
-          {/* Status Atual */}
-          {isActive && (
+          {/* Status Atual — Card Detalhado */}
+          {(isActive || subStatus === "past_due" || subStatus === "pending" || subStatus === "canceled") && subDetails && (
             <FadeIn delay={0.1}>
-              <div className="max-w-lg mx-auto mb-8 p-6 rounded-2xl bg-[#00e676]/5 border border-[#00e676]/20 text-center">
-                <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  transition={{ type: "spring", stiffness: 200 }}
-                  className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-[#00e676]/10 mb-3"
-                >
-                  <CheckCircle2 className="h-8 w-8 text-[#00e676]" />
-                </motion.div>
-                <h2 className="text-xl font-bold text-[#fafafa] mb-1">Assinatura Ativa 🎉</h2>
+              <div className={`max-w-lg mx-auto mb-8 p-6 rounded-2xl border ${
+                isActive
+                  ? "bg-[#00e676]/5 border-[#00e676]/20"
+                  : subStatus === "pending"
+                  ? "bg-[#ffab00]/5 border-[#ffab00]/20"
+                  : subStatus === "past_due"
+                  ? diasTolerancia > 0
+                    ? "bg-[#ffab00]/5 border-[#ffab00]/20"
+                    : "bg-[#ff5252]/5 border-[#ff5252]/20"
+                  : "bg-[#ff5252]/5 border-[#ff5252]/20"
+              }`}>
+                <div className="text-center mb-4">
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ type: "spring", stiffness: 200 }}
+                    className={`inline-flex items-center justify-center w-16 h-16 rounded-full mb-3 ${
+                      isActive
+                        ? "bg-[#00e676]/10"
+                        : subStatus === "pending"
+                        ? "bg-[#ffab00]/10"
+                        : "bg-[#ff5252]/10"
+                    }`}
+                  >
+                    {isActive ? (
+                      <CheckCircle2 className="h-8 w-8 text-[#00e676]" />
+                    ) : subStatus === "pending" ? (
+                      <Clock className="h-8 w-8 text-[#ffab00]" />
+                    ) : (
+                      <XCircle className="h-8 w-8 text-[#ff5252]" />
+                    )}
+                  </motion.div>
+                  <h2 className={`text-xl font-bold mb-1 ${
+                    isActive ? "text-[#fafafa]" : "text-[#ffab00]"
+                  }`}>
+                    {isActive && "Assinatura Ativa 🎉"}
+                    {subStatus === "pending" && "Pagamento Pendente ⏳"}
+                    {subStatus === "past_due" && diasTolerancia > 0 && "Em tolerância ⚠️"}
+                    {subStatus === "past_due" && diasTolerancia <= 0 && "Assinatura Vencida ❌"}
+                    {subStatus === "canceled" && "Assinatura Cancelada"}
+                  </h2>
+                </div>
+
+                {/* Detalhes */}
+                <div className="space-y-3">
+                  {/* Vigente até */}
+                  {subDetails.currentPeriodEnd && (
+                    <div className="flex items-center justify-between p-3 rounded-lg bg-[#121212] border border-[#2a2a2a]">
+                      <span className="flex items-center gap-2 text-sm text-[#6b7280]">
+                        <Calendar className="h-4 w-4" />
+                        Vigente até
+                      </span>
+                      <span className="text-sm font-medium text-[#fafafa]">
+                        {SubscriptionService.formatarData(subDetails.currentPeriodEnd)}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Próxima cobrança */}
+                  {isActive && subDetails.currentPeriodEnd && (
+                    <div className="flex items-center justify-between p-3 rounded-lg bg-[#121212] border border-[#2a2a2a]">
+                      <span className="flex items-center gap-2 text-sm text-[#6b7280]">
+                        <RefreshCw className="h-4 w-4" />
+                        Próxima cobrança
+                      </span>
+                      <span className="text-sm font-medium text-[#fafafa]">
+                        {SubscriptionService.formatarData(subDetails.currentPeriodEnd)}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Tolerância */}
+                  {diasTolerancia > 0 && (
+                    <div className="flex items-center justify-between p-3 rounded-lg bg-[#ffab00]/5 border border-[#ffab00]/20">
+                      <span className="flex items-center gap-2 text-sm text-[#ffab00]">
+                        <AlertTriangle className="h-4 w-4" />
+                        Fim da tolerância
+                      </span>
+                      <span className="text-sm font-bold text-[#ffab00]">
+                        {diasTolerancia} dia{diasTolerancia > 1 ? "s" : ""}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Último pagamento */}
+                  {subDetails.lastPaymentAt && (
+                    <div className="flex items-center justify-between p-3 rounded-lg bg-[#121212] border border-[#2a2a2a]">
+                      <span className="flex items-center gap-2 text-sm text-[#6b7280]">
+                        <CheckCircle2 className="h-4 w-4 text-[#00e676]" />
+                        Último pagamento
+                      </span>
+                      <span className="text-sm text-[#fafafa]">
+                        {SubscriptionService.formatarData(subDetails.lastPaymentAt)}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Preço */}
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-[#121212] border border-[#2a2a2a]">
+                    <span className="flex items-center gap-2 text-sm text-[#6b7280]">
+                      <CreditCard className="h-4 w-4" />
+                      Plano
+                    </span>
+                    <span className="text-sm font-medium text-[#fafafa]">
+                      R$ {subDetails.planPrice.toFixed(2).replace(".", ",")}/mês
+                    </span>
+                  </div>
+                </div>
+
+                {/* Status badges */}
+                {subStatus === "past_due" && diasTolerancia > 0 && (
+                  <div className="mt-4 text-center">
+                    <p className="text-sm text-muted-foreground mb-3">
+                      Você ainda pode administrar suas peladas durante a tolerância.
+                      Após o prazo, o acesso administrativo será bloqueado.
+                    </p>
+                    <Link href="/planos">
+                      <Button variant="glow" size="sm">
+                        <CreditCard className="mr-2 h-4 w-4" />
+                        Regularizar agora
+                      </Button>
+                    </Link>
+                  </div>
+                )}
+
+                {subStatus === "past_due" && diasTolerancia <= 0 && (
+                  <div className="mt-4 text-center">
+                    <p className="text-sm text-[#ff5252]/80 mb-3">
+                      Sua assinatura expirou e o acesso administrativo foi bloqueado.
+                      Faça um novo pagamento para reativar.
+                    </p>
+                    <Link href="/planos">
+                      <Button variant="glow" size="sm">
+                        <CreditCard className="mr-2 h-4 w-4" />
+                        Reativar assinatura
+                      </Button>
+                    </Link>
+                  </div>
+                )}
+              </div>
+            </FadeIn>
+          )}
+
+          {/* Nenhuma assinatura */}
+          {subStatus === "none" && (
+            <FadeIn delay={0.1}>
+              <div className="max-w-lg mx-auto mb-8 p-6 rounded-2xl bg-[#121212] border border-[#2a2a2a] text-center">
+                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-[#2a2a2a] mb-3">
+                  <CreditCard className="h-8 w-8 text-[#6b7280]" />
+                </div>
+                <h2 className="text-xl font-bold text-[#fafafa] mb-1">Sem assinatura</h2>
                 <p className="text-sm text-muted-foreground">
-                  {diasTolerancia > 0
-                    ? `Você tem ${diasTolerancia} dia(s) de tolerância. Regularize para não perder o acesso.`
-                    : "Você tem acesso a todos os recursos de administração."}
+                  Você ainda não possui uma assinatura. Assine abaixo para desbloquear todas as funcionalidades de administração.
                 </p>
               </div>
             </FadeIn>

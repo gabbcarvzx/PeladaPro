@@ -150,6 +150,65 @@ export class SubscriptionService {
   }
 
   /**
+   * Busca dados completos da assinatura + profile para exibição
+   */
+  async getSubscriptionDetails(userId: string): Promise<{
+    status: string
+    graceUntil: string | null
+    currentPeriodEnd: string | null
+    lastPaymentAt: string | null
+    planPrice: number
+    diasRestantes: number
+  }> {
+    const [subResult, profileResult] = await Promise.all([
+      this.supabase
+        .from("subscriptions")
+        .select("status, current_period_end, grace_until, last_payment_at, plan_price")
+        .eq("user_id", userId)
+        .maybeSingle(),
+      this.supabase
+        .from("profiles")
+        .select("subscription_status, subscription_grace_until")
+        .eq("id", userId)
+        .single(),
+    ])
+
+    const sub = subResult.data as any
+    const profile = profileResult.data as any
+
+    const status = sub?.status || profile?.subscription_status || "none"
+    const graceUntil = sub?.grace_until || profile?.subscription_grace_until || null
+    const currentPeriodEnd = sub?.current_period_end || null
+    const lastPaymentAt = sub?.last_payment_at || null
+    const planPrice = sub?.plan_price || 30.0
+
+    return {
+      status,
+      graceUntil,
+      currentPeriodEnd,
+      lastPaymentAt,
+      planPrice,
+      diasRestantes: SubscriptionService.getDiasRestantes(graceUntil),
+    }
+  }
+
+  /**
+   * Formata data ISO para exibição (pt-BR)
+   */
+  static formatarData(isoString: string | null): string {
+    if (!isoString) return "—"
+    try {
+      return new Date(isoString).toLocaleDateString("pt-BR", {
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
+      })
+    } catch {
+      return "—"
+    }
+  }
+
+  /**
    * Calcula dias restantes de tolerância
    */
   static getDiasRestantes(graceUntil: string | null): number {
