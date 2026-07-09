@@ -12,14 +12,13 @@ export function Logo({ className, href }: LogoProps) {
     <Image
       src="/logo.png"
       alt="PeladaPro"
-      width={100}
+      width={180}
       height={48}
-      sizes="(max-width: 768px) 40px, 48px"
+      priority
       className={cn(
-        "h-10 md:h-12 w-auto object-contain transition-opacity duration-200 hover:opacity-90",
+        "h-auto w-[128px] sm:w-[150px] md:w-[180px] object-contain transition-opacity duration-200 hover:opacity-90",
         className,
       )}
-      priority
     />
   )
 

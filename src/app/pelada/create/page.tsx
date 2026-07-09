@@ -107,9 +107,9 @@ export default function CreatePeladaPage() {
   return (
     <div className="min-h-screen bg-muted/20">
       {/* Header */}
-      <header className="glass sticky top-0 z-50 border-b border-border">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-[72px]">
+      <header className="sticky top-0 z-50 border-b border-white/10 bg-[#0a0a0a]/80 backdrop-blur-md">
+        <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
+          <div className="flex min-h-[68px] items-center justify-between md:min-h-[76px]">
             <div className="flex items-center gap-3">
               <Link href="/dashboard">
                 <Button variant="ghost" size="icon">

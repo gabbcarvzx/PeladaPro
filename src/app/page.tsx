@@ -48,9 +48,9 @@ export default function Home() {
   return (
     <div className="flex flex-col min-h-screen">
       {/* Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 glass">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-[72px]">
+      <header className="fixed top-0 left-0 right-0 z-50 border-b border-white/10 bg-[#0a0a0a]/80 backdrop-blur-md">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="flex min-h-[68px] items-center justify-between md:min-h-[76px]">
             <Logo href="/" />
             <nav className="flex items-center gap-4">
               <Link href="/auth/login">
@@ -88,17 +88,17 @@ export default function Home() {
           </FadeIn>
 
           <FadeIn delay={0.1}>
-            <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tight mb-6 text-[#fafafa]">
+            <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tight mb-6 text-[#fafafa] leading-tight">
               Organize suas{" "}
-              <span className="bg-gradient-brand bg-clip-text text-transparent">
-                Peladas
+              <span className="inline-flex items-center rounded-2xl bg-[#00e676] px-4 py-1 text-[#0a0a0a] shadow-[0_0_30px_rgba(0,230,118,0.25)]">
+                peladas
               </span>{" "}
               com Facilidade
             </h1>
           </FadeIn>
 
           <FadeIn delay={0.2}>
-            <p className="text-lg sm:text-xl text-[#6b7280] max-w-2xl mx-auto mb-8">
+            <p className="text-lg sm:text-xl text-[#b8c2cc] max-w-2xl mx-auto mb-8">
               Crie peladas, convide amigos, confirme presença e sorteie times
               equilibrados — tudo em um só lugar, de graça.
             </p>

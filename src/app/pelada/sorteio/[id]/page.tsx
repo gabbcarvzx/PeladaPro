@@ -177,9 +177,9 @@ export default function SorteioPage({ params }: Props) {
 
   return (
     <div className="min-h-screen bg-muted/20">
-      <header className="glass sticky top-0 z-50 border-b border-border">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-[72px]">
+      <header className="sticky top-0 z-50 border-b border-white/10 bg-[#0a0a0a]/80 backdrop-blur-md">
+        <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
+          <div className="flex min-h-[68px] items-center justify-between md:min-h-[76px]">
             <div className="flex items-center gap-3">
               <Link href={`/pelada/${peladaId}`}>
                 <Button variant="ghost" size="icon">
