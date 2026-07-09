@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
-import type { Pelada, PeladaParticipante, ConfirmacaoDia, ListaEspera, HistoricoSorteio, SorteioModo } from "@/types"
+import type { Pelada, PeladaOcorrencia, PeladaParticipante, ConfirmacaoDia, ListaEspera, HistoricoSorteio, SorteioModo } from "@/types"
 
 export class PeladaService {
   private supabase: SupabaseClient
@@ -20,6 +20,9 @@ export class PeladaService {
     local?: string
     data?: string
     admin_id: string
+    recorrente?: boolean
+    dia_semana?: number | null
+    horario?: string | null
   }): Promise<Pelada | null> {
     // Gera um link de convite único
     const { data: linkData } = await this.supabase.rpc("gerar_link_convite")
@@ -28,8 +31,18 @@ export class PeladaService {
     const { data: pelada } = await this.supabase
       .from("peladas")
       .insert({
-        ...data,
+        nome: data.nome,
+        descricao: data.descricao,
+        limite_jogadores: data.limite_jogadores,
+        numero_times: data.numero_times,
+        jogadores_por_time: data.jogadores_por_time,
+        local: data.local,
+        data: data.data,
+        admin_id: data.admin_id,
         link_convite,
+        recorrente: data.recorrente || false,
+        dia_semana: data.dia_semana || null,
+        horario: data.horario || null,
       })
       .select()
       .single()
@@ -283,7 +296,7 @@ export class PeladaService {
    * vai automaticamente para a lista de espera.
    * Mensalistas sempre entram (prioridade).
    */
-  async confirmarPresenca(peladaId: string, userId: string, dataJogo: string): Promise<{ status: "confirmado" | "fila"; posicao?: number }> {
+  async confirmarPresenca(peladaId: string, userId: string, dataJogo: string, ocorrenciaId?: string): Promise<{ status: "confirmado" | "fila"; posicao?: number }> {
     if (!(await this.isParticipante(peladaId, userId))) {
       throw new Error("Você não é participante desta pelada")
     }
@@ -308,6 +321,7 @@ export class PeladaService {
         user_id: userId,
         data_jogo: dataJogo,
         status: "confirmado",
+        ...(ocorrenciaId ? { pelada_ocorrencia_id: ocorrenciaId } : {}),
       }, {
         onConflict: "pelada_id, user_id, data_jogo",
       })
@@ -337,6 +351,7 @@ export class PeladaService {
       user_id: userId,
       data_jogo: dataJogo,
       status: "pendente",
+      ...(ocorrenciaId ? { pelada_ocorrencia_id: ocorrenciaId } : {}),
     }, {
       onConflict: "pelada_id, user_id, data_jogo",
     })
@@ -348,6 +363,7 @@ export class PeladaService {
       data_jogo: dataJogo,
       posicao,
       prioridade: "diarista",
+      ...(ocorrenciaId ? { pelada_ocorrencia_id: ocorrenciaId } : {}),
     })
 
     return { status: "fila", posicao }
@@ -358,7 +374,7 @@ export class PeladaService {
    * Se o jogador estava confirmado, promove automaticamente
    * o primeiro da fila de espera.
    */
-  async recusarPresenca(peladaId: string, userId: string, dataJogo: string): Promise<{ promovido: boolean; nomePromovido?: string }> {
+  async recusarPresenca(peladaId: string, userId: string, dataJogo: string, ocorrenciaId?: string): Promise<{ promovido: boolean; nomePromovido?: string }> {
     if (!(await this.isParticipante(peladaId, userId))) {
       throw new Error("Você não é participante desta pelada")
     }
@@ -381,6 +397,7 @@ export class PeladaService {
       user_id: userId,
       data_jogo: dataJogo,
       status: "recusado",
+      ...(ocorrenciaId ? { pelada_ocorrencia_id: ocorrenciaId } : {}),
     }, {
       onConflict: "pelada_id, user_id, data_jogo",
     })
@@ -508,6 +525,7 @@ export class PeladaService {
     participantes: { user_id: string; nome: string; avatar_url: string | null; tipo: string }[],
     numeroTimes: number,
     jogadoresPorTime: number,
+    ocorrenciaId?: string,
   ): Promise<HistoricoSorteio | null> {
     const times = this.gerarTimes(participantes, modo, numeroTimes, jogadoresPorTime)
 
@@ -517,6 +535,7 @@ export class PeladaService {
         pelada_id: peladaId,
         modo,
         times: JSON.stringify(times),
+        ...(ocorrenciaId ? { pelada_ocorrencia_id: ocorrenciaId } : {}),
       })
       .select()
       .single()
@@ -608,5 +627,133 @@ export class PeladaService {
       .order("created_at", { ascending: false })
 
     return (data as HistoricoSorteio[]) || []
+  }
+
+  // ==========================================
+  // OCORRÊNCIAS (Recorrência Semanal)
+  // ==========================================
+
+  /**
+   * Obtém ou cria a próxima ocorrência para uma pelada recorrente
+   */
+  async getOrCreateProximaOcorrencia(peladaId: string): Promise<PeladaOcorrencia | null> {
+    const { data } = await this.supabase.rpc("get_or_create_proxima_ocorrencia", {
+      p_pelada_id: peladaId,
+    })
+
+    // A função v2 retorna { ocorrencia_id, ocorrencia_data } via OUT params
+    const result = data as unknown as { ocorrencia_id: string; ocorrencia_data: string } | null
+    if (!result?.ocorrencia_id) return null
+
+    const { data: ocorrencia } = await this.supabase
+      .from("pelada_ocorrencias")
+      .select("*")
+      .eq("id", result.ocorrencia_id)
+      .single()
+
+    return ocorrencia as PeladaOcorrencia | null
+  }
+
+  /**
+   * Busca ocorrências de uma pelada
+   */
+  async getOcorrencias(peladaId: string): Promise<PeladaOcorrencia[]> {
+    const { data } = await this.supabase
+      .from("pelada_ocorrencias")
+      .select("*")
+      .eq("pelada_id", peladaId)
+      .order("data", { ascending: false })
+
+    return (data as PeladaOcorrencia[]) || []
+  }
+
+  /**
+   * Busca a ocorrência aberta mais próxima
+   */
+  async getProximaOcorrencia(peladaId: string): Promise<PeladaOcorrencia | null> {
+    const { data } = await this.supabase
+      .from("pelada_ocorrencias")
+      .select("*")
+      .eq("pelada_id", peladaId)
+      .eq("status", "aberta")
+      .gte("data", new Date().toISOString().split("T")[0])
+      .order("data", { ascending: true })
+      .limit(1)
+      .maybeSingle()
+
+    return data as PeladaOcorrencia | null
+  }
+
+  /**
+   * Encerra uma ocorrência
+   */
+  async encerrarOcorrencia(ocorrenciaId: string): Promise<void> {
+    await this.supabase
+      .from("pelada_ocorrencias")
+      .update({ status: "encerrada" })
+      .eq("id", ocorrenciaId)
+  }
+
+  /**
+   * Cria uma ocorrência inicial para migração de dados
+   */
+  async criarOcorrenciaInicial(peladaId: string, data: string): Promise<PeladaOcorrencia | null> {
+    const { data: ocorrencia } = await this.supabase.rpc("criar_ocorrencia_inicial", {
+      p_pelada_id: peladaId,
+      p_data: data,
+    })
+
+    if (!ocorrencia) return null
+
+    const { data: result } = await this.supabase
+      .from("pelada_ocorrencias")
+      .select("*")
+      .eq("id", ocorrencia as string)
+      .single()
+
+    return result as PeladaOcorrencia | null
+  }
+
+  /**
+   * Atualiza a configuração de recorrência de uma pelada
+   */
+  async atualizarRecorrencia(
+    peladaId: string,
+    recorrente: boolean,
+    dia_semana?: number | null,
+    horario?: string | null,
+  ): Promise<Pelada | null> {
+    const updates: Record<string, unknown> = { recorrente }
+    if (dia_semana !== undefined) updates.dia_semana = dia_semana
+    if (horario !== undefined) updates.horario = horario
+
+    const { data } = await this.supabase
+      .from("peladas")
+      .update(updates)
+      .eq("id", peladaId)
+      .select()
+      .single()
+
+    return data as Pelada | null
+  }
+
+  /**
+   * Nomes dos dias da semana
+   */
+  static DIAS_SEMANA = [
+    "Domingo",
+    "Segunda-feira",
+    "Terça-feira",
+    "Quarta-feira",
+    "Quinta-feira",
+    "Sexta-feira",
+    "Sábado",
+  ]
+
+  /**
+   * Formata dia da semana para exibição
+   */
+  static formatarDiaSemana(dia: number): string {
+    return PeladaService.DIAS_SEMANA[dia] || "—"
   }
 }

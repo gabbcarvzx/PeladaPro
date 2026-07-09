@@ -33,7 +33,7 @@ import {
   TimerOff,
   TimerReset,
 } from "lucide-react"
-import type { Pelada, Confronto, EventoConfronto, TimeSorteioJogador } from "@/types"
+import type { Pelada, PeladaOcorrencia, Confronto, EventoConfronto, TimeSorteioJogador } from "@/types"
 
 interface Props {
   params: Promise<{ id: string }>
@@ -58,6 +58,7 @@ export default function AoVivoPage({ params }: Props) {
   const [isTimerRunning, setIsTimerRunning] = useState(false)
   const [showTimerConfig, setShowTimerConfig] = useState(false)
   const [selectedDuration, setSelectedDuration] = useState(10)
+  const [ocorrenciaAtual, setOcorrenciaAtual] = useState<PeladaOcorrencia | null>(null)
   const autoFinalizedRef = useRef<string | null>(null)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -243,6 +244,12 @@ export default function AoVivoPage({ params }: Props) {
       }
       const hist = await confrontoService.getHistoricoConfrontos(peladaId)
       setHistorico(hist)
+
+      // Para peladas recorrentes, obtém a próxima ocorrência
+      if (p.recorrente) {
+        const oc = await peladaService.getOrCreateProximaOcorrencia(peladaId)
+        if (oc) setOcorrenciaAtual(oc)
+      }
     }
     setLoading(false)
   }
@@ -297,7 +304,7 @@ export default function AoVivoPage({ params }: Props) {
       }
       const ultimoSorteio = sorteios[0]
       const tempoLimite = (durationMinutes || selectedDuration) * 60
-      const confronto = await confrontoService.iniciarConfrontos(peladaId, ultimoSorteio.id, tempoLimite)
+      const confronto = await confrontoService.iniciarConfrontos(peladaId, ultimoSorteio.id, tempoLimite, ocorrenciaAtual?.id)
       if (confronto) {
         setConfrontoAtual(confronto)
         toast({

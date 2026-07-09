@@ -16,7 +16,7 @@ export class ConfrontoService {
    * Inicia os confrontos a partir de um sorteio já realizado.
    * Cria a fila circular de times e gera o primeiro confronto.
    */
-  async iniciarConfrontos(peladaId: string, sorteioId: string, tempoLimite?: number): Promise<Confronto | null> {
+  async iniciarConfrontos(peladaId: string, sorteioId: string, tempoLimite?: number, ocorrenciaId?: string): Promise<Confronto | null> {
     // Busca o sorteio com os times
     const { data: sorteio } = await this.supabase
       .from("historico_sorteios")
@@ -65,6 +65,7 @@ export class ConfrontoService {
       1,
       filaJson,
       tempoLimite,
+      ocorrenciaId,
     )
 
     return primeiro
@@ -81,6 +82,7 @@ export class ConfrontoService {
     ordem: number,
     filaRestante?: string,
     tempoLimite?: number,
+    ocorrenciaId?: string,
   ): Promise<Confronto | null> {
     const inserData: Record<string, unknown> = {
       pelada_id: peladaId,
@@ -91,6 +93,7 @@ export class ConfrontoService {
       time_b_jogadores: JSON.stringify(timeB.jogadores),
       ordem,
       tempo_limite: tempoLimite || 600,
+      ...(ocorrenciaId ? { pelada_ocorrencia_id: ocorrenciaId } : {}),
     }
 
     if (filaRestante) {
@@ -271,6 +274,7 @@ export class ConfrontoService {
     const filaRestante = this.parseFila(confronto)
     const vencedor = this.getVencedor(confronto, resultado)
     const tempoLimite = confronto.tempo_limite
+    const ocorrenciaId = confronto.pelada_ocorrencia_id ?? undefined
 
     // Gera o próximo confronto
     let proximoConfronto: Confronto | null = null
@@ -289,6 +293,7 @@ export class ConfrontoService {
           confronto.ordem + 1,
           JSON.stringify(novaFila),
           tempoLimite,
+          ocorrenciaId,
         )
       } else if (proximos.length === 1) {
         // Só tem 1 time na fila — ele enfrenta o time A (que empatou) de volta
@@ -303,6 +308,7 @@ export class ConfrontoService {
             confronto.ordem + 1,
             JSON.stringify(filaReiniciada.slice(2)),
             tempoLimite,
+            ocorrenciaId,
           )
         }
       } else {
@@ -317,6 +323,7 @@ export class ConfrontoService {
             confronto.ordem + 1,
             JSON.stringify(timesOriginais.slice(2)),
             tempoLimite,
+            ocorrenciaId,
           )
         }
       }
@@ -334,6 +341,7 @@ export class ConfrontoService {
           confronto.ordem + 1,
           JSON.stringify(novaFila),
           tempoLimite,
+          ocorrenciaId,
         )
       } else {
         // Fila vazia — reinicia com os times originais (vencedor + alguém)
@@ -354,6 +362,7 @@ export class ConfrontoService {
             confronto.ordem + 1,
             JSON.stringify(restantes.slice(1)),
             tempoLimite,
+            ocorrenciaId,
           )
         } else {
           // Só tem 1 time restante — reinicia tudo
@@ -367,6 +376,7 @@ export class ConfrontoService {
               confronto.ordem + 1,
               JSON.stringify(filaReiniciada.slice(2)),
               tempoLimite,
+              ocorrenciaId,
             )
           }
         }

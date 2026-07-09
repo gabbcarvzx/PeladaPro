@@ -30,6 +30,8 @@ import {
   Shuffle,
   FileText,
   Trophy,
+  Repeat,
+  Clock,
 } from "lucide-react"
 
 export default function CreatePeladaPage() {
@@ -44,7 +46,20 @@ export default function CreatePeladaPage() {
   const [limiteJogadores, setLimiteJogadores] = useState("20")
   const [numeroTimes, setNumeroTimes] = useState("2")
   const [jogadoresPorTime, setJogadoresPorTime] = useState("5")
+  const [recorrente, setRecorrente] = useState(false)
+  const [diaSemana, setDiaSemana] = useState("4")
+  const [horario, setHorario] = useState("20:00")
   const [saving, setSaving] = useState(false)
+
+  const DIAS_SEMANA = [
+    { value: "0", label: "Domingo" },
+    { value: "1", label: "Segunda-feira" },
+    { value: "2", label: "Terça-feira" },
+    { value: "3", label: "Quarta-feira" },
+    { value: "4", label: "Quinta-feira" },
+    { value: "5", label: "Sexta-feira" },
+    { value: "6", label: "Sábado" },
+  ]
 
   if (authLoading) {
     return (
@@ -70,11 +85,14 @@ export default function CreatePeladaPage() {
         nome,
         descricao: descricao || undefined,
         local: local || undefined,
-        data: data || undefined,
+        data: recorrente ? undefined : data || undefined,
         limite_jogadores: parseInt(limiteJogadores),
         numero_times: parseInt(numeroTimes),
         jogadores_por_time: parseInt(jogadoresPorTime),
         admin_id: user.id,
+        recorrente,
+        dia_semana: recorrente ? parseInt(diaSemana) : null,
+        horario: recorrente ? horario : null,
       })
 
       if (pelada) {
@@ -185,18 +203,84 @@ export default function CreatePeladaPage() {
                     </div>
 
                     {/* Data */}
-                    <div className="space-y-2">
-                      <Label htmlFor="data">Data do jogo</Label>
-                      <div className="relative">
-                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          id="data"
-                          type="datetime-local"
-                          value={data}
-                          onChange={(e) => setData(e.target.value)}
-                          className="pl-10"
-                        />
+                    {!recorrente && (
+                      <div className="space-y-2">
+                        <Label htmlFor="data">Data do jogo</Label>
+                        <div className="relative">
+                          <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                          <Input
+                            id="data"
+                            type="datetime-local"
+                            value={data}
+                            onChange={(e) => setData(e.target.value)}
+                            className="pl-10"
+                          />
+                        </div>
                       </div>
+                    )}
+
+                    {/* Recorrente: Dia da Semana */}
+                    {recorrente && (
+                      <div className="space-y-2">
+                        <Label>Dia da Semana</Label>
+                        <Select value={diaSemana} onValueChange={setDiaSemana}>
+                          <SelectTrigger>
+                            <Calendar className="mr-2 h-4 w-4" />
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {DIAS_SEMANA.map((d) => (
+                              <SelectItem key={d.value} value={d.value}>
+                                {d.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+
+                    {/* Recorrente: Horário */}
+                    {recorrente && (
+                      <div className="space-y-2">
+                        <Label>Horário</Label>
+                        <div className="relative">
+                          <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                          <Input
+                            type="time"
+                            value={horario}
+                            onChange={(e) => setHorario(e.target.value)}
+                            className="pl-10"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Recorrência Toggle */}
+                  <div className="flex items-center gap-3 p-4 rounded-lg border border-[#2a2a2a] bg-[#121212]">
+                    <button
+                      type="button"
+                      onClick={() => setRecorrente(!recorrente)}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                        recorrente ? "bg-[#00e676]" : "bg-[#2a2a2a]"
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+                          recorrente ? "translate-x-6" : "translate-x-0.5"
+                        }`}
+                      />
+                    </button>
+                    <div>
+                      <label className="text-sm font-medium text-[#fafafa] flex items-center gap-2 cursor-pointer" onClick={() => setRecorrente(!recorrente)}>
+                        <Repeat className="h-4 w-4" />
+                        Pelada recorrente semanal
+                      </label>
+                      <p className="text-xs text-muted-foreground">
+                        {recorrente
+                          ? `Acontece toda ${DIAS_SEMANA.find((d) => d.value === diaSemana)?.label} às ${horario}`
+                          : "Ative para criar uma pelada que se repete toda semana"}
+                      </p>
                     </div>
                   </div>
 

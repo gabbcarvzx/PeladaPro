@@ -52,8 +52,9 @@ import {
   ArrowUp,
   Zap,
   Swords,
+  Repeat,
 } from "lucide-react"
-import type { Pelada, PeladaParticipante, ConfirmacaoDia, ListaEspera } from "@/types"
+import type { Pelada, PeladaOcorrencia, PeladaParticipante, ConfirmacaoDia, ListaEspera } from "@/types"
 import { BadgeStatus } from "@/components/ui/badge-status"
 
 interface Props {
@@ -76,6 +77,7 @@ export default function PeladaDetailPage({ params }: Props) {
   const [showFila, setShowFila] = useState(false)
   const [minhaPosicaoFila, setMinhaPosicaoFila] = useState(0)
   const [promovidoInfo, setPromovidoInfo] = useState<{ nome: string } | null>(null)
+  const [ocorrenciaAtual, setOcorrenciaAtual] = useState<PeladaOcorrencia | null>(null)
 
   const isAdmin = user?.id === pelada?.admin_id
 
@@ -107,6 +109,15 @@ export default function PeladaDetailPage({ params }: Props) {
       setPelada(p)
       const parts = await peladaService.getParticipantes(peladaId)
       setParticipantes(parts)
+
+      // Para peladas recorrentes, obtém ou cria a próxima ocorrência
+      if (p.recorrente) {
+        const oc = await peladaService.getOrCreateProximaOcorrencia(peladaId)
+        if (oc) {
+          setOcorrenciaAtual(oc)
+          setConfirmingDate(oc.data)
+        }
+      }
     }
     setLoading(false)
   }
@@ -169,7 +180,7 @@ export default function PeladaDetailPage({ params }: Props) {
 
   const handleConfirmarPresenca = async () => {
     if (!user || !confirmingDate) return
-    const result = await peladaService.confirmarPresenca(peladaId, user.id, confirmingDate)
+    const result = await peladaService.confirmarPresenca(peladaId, user.id, confirmingDate, ocorrenciaAtual?.id)
 
     if (result.status === "fila") {
       toast({
@@ -186,7 +197,7 @@ export default function PeladaDetailPage({ params }: Props) {
 
   const handleRecusarPresenca = async () => {
     if (!user || !confirmingDate) return
-    const result = await peladaService.recusarPresenca(peladaId, user.id, confirmingDate)
+    const result = await peladaService.recusarPresenca(peladaId, user.id, confirmingDate, ocorrenciaAtual?.id)
 
     if (result.promovido && result.nomePromovido) {
       setPromovidoInfo({ nome: result.nomePromovido })
@@ -317,12 +328,29 @@ export default function PeladaDetailPage({ params }: Props) {
                   <div>
                     <div className="flex items-center gap-2 mb-2">
                       {isAdmin && <BadgeStatus type="admin" />}
+                      {pelada.recorrente && pelada.dia_semana !== null && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#00e676]/10 text-[#00e676] text-xs font-medium border border-[#00e676]/20">
+                          <Repeat className="h-3 w-3" />
+                          Recorrente semanal
+                        </span>
+                      )}
                     </div>
                     <h1 className="text-3xl sm:text-4xl font-bold text-[#fafafa] mb-2">
                       {pelada.nome}
                     </h1>
                     {pelada.descricao && (
                       <p className="text-[#6b7280] mb-4">{pelada.descricao}</p>
+                    )}
+                    {pelada.recorrente && pelada.dia_semana !== null && (
+                      <p className="text-sm text-[#00e676] mt-1 flex items-center gap-1.5">
+                        <Calendar className="h-3.5 w-3.5" />
+                        Toda {PeladaService.formatarDiaSemana(pelada.dia_semana)}{pelada.horario ? ` às ${pelada.horario}` : ''}
+                        {ocorrenciaAtual && (
+                          <span className="text-[#fafafa]/70 ml-1">
+                            · Próxima: {new Date(ocorrenciaAtual.data + 'T12:00:00').toLocaleDateString('pt-BR')}
+                          </span>
+                        )}
+                      </p>
                     )}
                   </div>
                   <Button

@@ -33,7 +33,7 @@ import {
   Sparkles,
   ArrowRight,
 } from "lucide-react"
-import type { Pelada, PeladaParticipante, ConfirmacaoDia, HistoricoSorteio, SorteioModo } from "@/types"
+import type { Pelada, PeladaOcorrencia, PeladaParticipante, ConfirmacaoDia, HistoricoSorteio, SorteioModo } from "@/types"
 
 interface Props {
   params: Promise<{ id: string }>
@@ -54,6 +54,7 @@ export default function SorteioPage({ params }: Props) {
   const [historico, setHistorico] = useState<HistoricoSorteio[]>([])
   const [showResult, setShowResult] = useState(false)
   const [animating, setAnimating] = useState(false)
+  const [ocorrenciaAtual, setOcorrenciaAtual] = useState<PeladaOcorrencia | null>(null)
 
   const isAdmin = user?.id === pelada?.admin_id
 
@@ -78,6 +79,12 @@ export default function SorteioPage({ params }: Props) {
       setPelada(p)
       const h = await peladaService.getHistoricoSorteios(peladaId)
       setHistorico(h)
+
+      // Para peladas recorrentes, obtém a próxima ocorrência
+      if (p.recorrente) {
+        const oc = await peladaService.getOrCreateProximaOcorrencia(peladaId)
+        if (oc) setOcorrenciaAtual(oc)
+      }
     }
     setLoading(false)
   }
@@ -117,6 +124,7 @@ export default function SorteioPage({ params }: Props) {
         jogadores,
         pelada.numero_times,
         pelada.jogadores_por_time,
+        ocorrenciaAtual?.id,
       )
 
       if (result) {

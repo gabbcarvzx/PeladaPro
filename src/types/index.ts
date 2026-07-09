@@ -36,6 +36,17 @@ export interface Pelada {
   jogadores_por_time: number
   local: string | null
   data: string | null
+  recorrente: boolean
+  dia_semana: number | null
+  horario: string | null
+  created_at: string
+}
+
+export interface PeladaOcorrencia {
+  id: string
+  pelada_id: string
+  data: string
+  status: "aberta" | "encerrada"
   created_at: string
 }
 
@@ -55,6 +66,7 @@ export interface ConfirmacaoDia {
   data_jogo: string
   status: ConfirmacaoStatus
   ordem_chegada: number | null
+  pelada_ocorrencia_id?: string | null
   created_at: string
   profile?: Profile
 }
@@ -66,6 +78,7 @@ export interface ListaEspera {
   data_jogo: string
   posicao: number
   prioridade: PlayerType
+  pelada_ocorrencia_id?: string | null
   created_at: string
   profile?: Profile
 }
@@ -76,6 +89,7 @@ export interface HistoricoSorteio {
   data_sorteio: string
   modo: SorteioModo
   times: TimeSorteio[]
+  pelada_ocorrencia_id?: string | null
   created_at: string
 }
 
@@ -105,6 +119,7 @@ export interface Confronto {
   iniciado_em: string | null
   tempo_restante: number | null
   ordem: number
+  pelada_ocorrencia_id?: string | null
   created_at: string
   updated_at: string
 }
