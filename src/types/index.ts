@@ -141,3 +141,39 @@ export type TimeSorteioJogador = {
   nome: string
   avatar_url: string | null
 }
+
+// ==========================================
+// Assinatura SaaS
+// ==========================================
+
+export type SubscriptionStatus = "none" | "active" | "past_due" | "canceled" | "expired" | "pending"
+
+export interface Subscription {
+  id: string
+  user_id: string
+  asaas_customer_id: string | null
+  asaas_subscription_id: string | null
+  status: SubscriptionStatus
+  plan_price: number
+  current_period_start: string | null
+  current_period_end: string | null
+  grace_until: string | null
+  last_payment_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type PaymentStatus = "pending" | "confirmed" | "overdue" | "refunded"
+
+export interface Payment {
+  id: string
+  user_id: string
+  subscription_id: string | null
+  asaas_payment_id: string | null
+  amount: number
+  status: PaymentStatus
+  due_date: string | null
+  paid_at: string | null
+  raw_payload: unknown
+  created_at: string
+}
