@@ -29,6 +29,7 @@ import { Logo } from "@/components/ui/logo"
 import { PageTransition, FadeIn, StaggerContainer, StaggerItem } from "@/components/layout/motion-wrapper"
 import { toast } from "@/components/ui/toaster"
 import { PeladaService } from "@/services/pelada-service"
+import { SubscriptionService } from "@/services/subscription-service"
 import {
   Loader2,
   Calendar,
@@ -53,6 +54,9 @@ import {
   Zap,
   Swords,
   Repeat,
+  AlertTriangle,
+  CreditCard,
+  Lock,
 } from "lucide-react"
 import type { Pelada, PeladaOcorrencia, PeladaParticipante, ConfirmacaoDia, ListaEspera } from "@/types"
 import { BadgeStatus } from "@/components/ui/badge-status"
@@ -78,6 +82,9 @@ export default function PeladaDetailPage({ params }: Props) {
   const [minhaPosicaoFila, setMinhaPosicaoFila] = useState(0)
   const [promovidoInfo, setPromovidoInfo] = useState<{ nome: string } | null>(null)
   const [ocorrenciaAtual, setOcorrenciaAtual] = useState<PeladaOcorrencia | null>(null)
+  const [isBlocked, setIsBlocked] = useState(false)
+  const [blockedReason, setBlockedReason] = useState<string | null>(null)
+  const [diasTolerancia, setDiasTolerancia] = useState(0)
 
   const isAdmin = user?.id === pelada?.admin_id
 
@@ -117,6 +124,18 @@ export default function PeladaDetailPage({ params }: Props) {
           setOcorrenciaAtual(oc)
           setConfirmingDate(oc.data)
         }
+      }
+
+      // Verifica bloqueio da pelada
+      const subscriptionService = new SubscriptionService(supabase)
+      const blockInfo = await subscriptionService.getPeladaBlockInfo(peladaId)
+      setIsBlocked(blockInfo.isBlocked)
+      setBlockedReason(blockInfo.blockedReason)
+
+      // Se for admin, verifica dias de tolerância
+      if (user && user.id === p.admin_id) {
+        const { graceUntil } = await subscriptionService.getUserSubscriptionStatus(user.id)
+        setDiasTolerancia(SubscriptionService.getDiasRestantes(graceUntil))
       }
     }
     setLoading(false)
@@ -319,6 +338,56 @@ export default function PeladaDetailPage({ params }: Props) {
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <PageTransition>
+          {/* Block Banner */}
+          {isAdmin && isBlocked && (
+            <FadeIn>
+              <div className="mb-6 p-6 rounded-2xl bg-[#ff5252]/5 border border-[#ff5252]/20">
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-[#ff5252]/10 flex items-center justify-center shrink-0">
+                    <Lock className="h-6 w-6 text-[#ff5252]" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-base font-semibold text-[#ff5252] mb-1">
+                      Pelada Bloqueada 🔒
+                    </h3>
+                    <p className="text-sm text-[#ff5252]/80 mb-3">
+                      {diasTolerancia > 0
+                        ? `Sua assinatura está vencida. Você tem ${diasTolerancia} dia(s) de tolerância antes do bloqueio total. Regularize o pagamento para manter o acesso administrativo.`
+                        : "Sua assinatura expirou. Esta pelada está bloqueada para administração até que o pagamento seja regularizado."}
+                    </p>
+                    <div className="flex gap-3">
+                      <Link href="/planos">
+                        <Button variant="glow" size="sm">
+                          <CreditCard className="mr-2 h-4 w-4" />
+                          Regularizar Assinatura
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </FadeIn>
+          )}
+
+          {/* Tolerância Banner */}
+          {isAdmin && !isBlocked && diasTolerancia > 0 && diasTolerancia <= 3 && (
+            <FadeIn>
+              <div className="mb-6 p-4 rounded-2xl bg-[#ffab00]/5 border border-[#ffab00]/20">
+                <div className="flex items-center gap-3">
+                  <AlertTriangle className="h-5 w-5 text-[#ffab00] shrink-0" />
+                  <p className="text-sm text-[#ffab00]/90">
+                    Sua assinatura venceu. Você tem <strong>{diasTolerancia} dia(s)</strong> de tolerância. Após esse período, a pelada será bloqueada para administração.
+                  </p>
+                  <Link href="/planos" className="shrink-0">
+                    <Button variant="ghost" size="sm" className="text-[#ffab00]">
+                      Regularizar
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            </FadeIn>
+          )}
+
           {/* Hero Section */}
           <FadeIn>
             <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#1a1a1a] to-[#121212] border border-[#00e676]/20 p-8 mb-8">

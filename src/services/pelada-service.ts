@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { Pelada, PeladaOcorrencia, PeladaParticipante, ConfirmacaoDia, ListaEspera, HistoricoSorteio, SorteioModo } from "@/types"
+import { SubscriptionService } from "./subscription-service"
 
 export class PeladaService {
   private supabase: SupabaseClient
@@ -24,6 +25,10 @@ export class PeladaService {
     dia_semana?: number | null
     horario?: string | null
   }): Promise<Pelada | null> {
+    // Verifica se o usuário tem assinatura ativa
+    const subService = new SubscriptionService(this.supabase)
+    await subService.assertCanCreatePelada(data.admin_id)
+
     // Gera um link de convite único
     const { data: linkData } = await this.supabase.rpc("gerar_link_convite")
     const link_convite = (linkData as string) || Math.random().toString(36).slice(2, 10)

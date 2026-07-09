@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { motion } from "framer-motion"
@@ -20,6 +20,7 @@ import { Logo } from "@/components/ui/logo"
 import { PageTransition, FadeIn } from "@/components/layout/motion-wrapper"
 import { toast } from "@/components/ui/toaster"
 import { PeladaService } from "@/services/pelada-service"
+import { SubscriptionService } from "@/services/subscription-service"
 import { PELADA_LIMITES } from "@/utils/constants"
 import {
   ArrowLeft,
@@ -32,6 +33,8 @@ import {
   Trophy,
   Repeat,
   Clock,
+  Sparkles,
+  CreditCard,
 } from "lucide-react"
 
 export default function CreatePeladaPage() {
@@ -50,6 +53,8 @@ export default function CreatePeladaPage() {
   const [diaSemana, setDiaSemana] = useState("4")
   const [horario, setHorario] = useState("20:00")
   const [saving, setSaving] = useState(false)
+  const [canCreate, setCanCreate] = useState<boolean | null>(null)
+  const [checkingAccess, setCheckingAccess] = useState(true)
 
   const DIAS_SEMANA = [
     { value: "0", label: "Domingo" },
@@ -72,6 +77,88 @@ export default function CreatePeladaPage() {
   if (!user) {
     router.push("/auth/login")
     return null
+  }
+
+  useEffect(() => {
+    if (!user) return
+    const subscriptionService = new SubscriptionService(supabase)
+    subscriptionService.hasActiveSubscription(user.id).then((allowed) => {
+      setCanCreate(allowed)
+      setCheckingAccess(false)
+    })
+  }, [user])
+
+  // Se não tem assinatura, mostra tela de bloqueio
+  if (!checkingAccess && canCreate === false) {
+    return (
+      <div className="min-h-screen bg-muted/20">
+        <header className="sticky top-0 z-50 border-b border-white/10 bg-[#0a0a0a]/80 backdrop-blur-md">
+          <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
+            <div className="flex min-h-[68px] items-center justify-between md:min-h-[76px]">
+              <div className="flex items-center gap-3">
+                <Link href="/dashboard">
+                  <Button variant="ghost" size="icon">
+                    <ArrowLeft className="h-5 w-5" />
+                  </Button>
+                </Link>
+                <Logo />
+              </div>
+            </div>
+          </div>
+        </header>
+        <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+          <PageTransition>
+            <FadeIn>
+              <Card className="text-center border-[#ffab00]/20">
+                <CardHeader>
+                  <motion.div
+                    animate={{ scale: [1, 1.05, 1] }}
+                    transition={{ duration: 2, repeat: Infinity }}
+                    className="text-6xl mb-4"
+                  >
+                    ⚡
+                  </motion.div>
+                  <CardTitle className="text-2xl">Assinatura necessária</CardTitle>
+                  <CardDescription className="text-base">
+                    Para criar e administrar peladas, você precisa do plano <strong>PeladaPro Premium</strong>.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="bg-[#121212] rounded-xl p-6 border border-[#2a2a2a] space-y-3">
+                    <p className="text-lg font-bold text-[#fafafa]">
+                      R$ 30,00<span className="text-sm font-normal text-muted-foreground">/mês</span>
+                    </p>
+                    <ul className="space-y-2 text-sm text-left">
+                      {[
+                        "Criar peladas ilimitadas",
+                        "Gerenciar lista de espera",
+                        "Sorteio de times",
+                        "Confrontos ao vivo",
+                        "Gols e assistências",
+                      ].map((item, i) => (
+                        <li key={i} className="flex items-center gap-2 text-[#fafafa]">
+                          <Sparkles className="h-4 w-4 text-[#00e676] shrink-0" />
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <Link href="/planos">
+                    <Button variant="glow" size="lg" className="w-full h-12 text-base">
+                      <CreditCard className="mr-2 h-5 w-5" />
+                      Assinar por R$ 30/mês
+                    </Button>
+                  </Link>
+                  <p className="text-xs text-muted-foreground">
+                    Participar de peladas por convite é gratuito. A assinatura é apenas para quem cria e administra.
+                  </p>
+                </CardContent>
+              </Card>
+            </FadeIn>
+          </PageTransition>
+        </main>
+      </div>
+    )
   }
 
   const handleSubmit = async (e: React.FormEvent) => {

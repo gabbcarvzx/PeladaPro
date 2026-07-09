@@ -20,3 +20,20 @@ export const CORES_TIMES = [
   { nome: "Rosa", bg: "bg-pink-500", text: "text-white" },
   { nome: "Cinza", bg: "bg-gray-500", text: "text-white" },
 ] as const
+
+export const PLANO = {
+  NOME: "PeladaPro Premium",
+  VALOR: 30,
+  VALOR_FORMATADO: "R$ 30,00",
+  CICLO: "mensal",
+  DIAS_TOLERANCIA: 3,
+  GRAVE_DAYS: 33, // 30 dias de plano + 3 de tolerância
+  BENEFICIOS: [
+    "Criar e administrar peladas ilimitadas",
+    "Gerenciar lista de espera e prioridade",
+    "Sorteio inteligente de times",
+    "Confrontos ao vivo com placar",
+    "Gols, assistências e estatísticas",
+    "Suporte prioritário",
+  ],
+} as const
