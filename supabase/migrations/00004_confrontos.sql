@@ -18,6 +18,9 @@ create table public.confrontos (
   status text not null default 'em_andamento' check (status in ('em_andamento', 'finalizado')),
   resultado text check (resultado in ('time_a', 'time_b', 'empate')),
   fila_restante jsonb,
+  tempo_limite integer not null default 600,
+  iniciado_em timestamptz,
+  tempo_restante integer,
   ordem integer not null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { motion, AnimatePresence } from "framer-motion"
@@ -28,6 +28,10 @@ import {
   MinusCircle,
   Goal,
   Star,
+  Clock,
+  Timer,
+  TimerOff,
+  TimerReset,
 } from "lucide-react"
 import type { Pelada, Confronto, EventoConfronto, TimeSorteioJogador } from "@/types"
 
@@ -50,8 +54,102 @@ export default function AoVivoPage({ params }: Props) {
   const [isFinalizando, setIsFinalizando] = useState(false)
   const [animatingGoal, setAnimatingGoal] = useState<"a" | "b" | null>(null)
   const [showGolSelector, setShowGolSelector] = useState<"a" | "b" | null>(null)
+  const [tempoDecorrido, setTempoDecorrido] = useState(0)
+  const [isTimerRunning, setIsTimerRunning] = useState(false)
+  const [showTimerConfig, setShowTimerConfig] = useState(false)
+  const [selectedDuration, setSelectedDuration] = useState(10)
+  const autoFinalizedRef = useRef<string | null>(null)
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const isAdmin = user?.id === pelada?.admin_id
+
+  // Calcular tempo restante do timer
+  const getTimerInfo = useCallback(() => {
+    if (!confrontoAtual) return { restante: 0, total: 300, progresso: 0, display: "00:00" }
+
+    const total = confrontoAtual.tempo_restante || confrontoAtual.tempo_limite
+
+    if (confrontoAtual.iniciado_em) {
+      const inicio = new Date(confrontoAtual.iniciado_em).getTime()
+      const decorrido = Math.floor((Date.now() - inicio) / 1000)
+      const restante = Math.max(0, total - decorrido)
+      const progresso = total > 0 ? ((total - restante) / total) * 100 : 0
+      const min = Math.floor(restante / 60)
+      const seg = restante % 60
+      return {
+        restante,
+        total,
+        progresso,
+        display: `${String(min).padStart(2, "0")}:${String(seg).padStart(2, "0")}`,
+      }
+    }
+
+    // Timer pausado ou não iniciado
+    const restante = total
+    const min = Math.floor(restante / 60)
+    const seg = restante % 60
+    return {
+      restante,
+      total,
+      progresso: 0,
+      display: `${String(min).padStart(2, "0")}:${String(seg).padStart(2, "0")}`,
+    }
+  }, [confrontoAtual]) // tempoDecorrido não é usado no corpo, apenas força re-render
+
+  // Timer countdown effect
+  useEffect(() => {
+    if (!confrontoAtual?.iniciado_em) {
+      setIsTimerRunning(false)
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+        intervalRef.current = null
+      }
+      return
+    }
+
+    // Reseta o contador quando o timer inicia/resume
+    setTempoDecorrido(0)
+    setIsTimerRunning(true)
+
+    intervalRef.current = setInterval(() => {
+      setTempoDecorrido((prev) => prev + 1)
+    }, 1000)
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+        intervalRef.current = null
+      }
+      setIsTimerRunning(false)
+    }
+  }, [confrontoAtual?.iniciado_em, confrontoAtual?.id])
+
+  // Reseta o ref de finalização automática quando o confronto muda
+  useEffect(() => {
+    autoFinalizedRef.current = null
+  }, [confrontoAtual?.id])
+
+  // Auto-finalizar quando timer expirar
+  useEffect(() => {
+    if (!confrontoAtual || !confrontoAtual.iniciado_em || !isAdmin) return
+
+    // Evita finalizar o mesmo confronto mais de uma vez
+    if (autoFinalizedRef.current === confrontoAtual.id) return
+
+    const timerInfo = getTimerInfo()
+    if (timerInfo.restante <= 0) {
+      autoFinalizedRef.current = confrontoAtual.id
+
+      // Define vencedor como quem está na frente
+      if (confrontoAtual.placar_a > confrontoAtual.placar_b) {
+        handleFinalizar("time_a")
+      } else if (confrontoAtual.placar_b > confrontoAtual.placar_a) {
+        handleFinalizar("time_b")
+      } else {
+        handleFinalizar("empate")
+      }
+    }
+  }, [tempoDecorrido])
 
   useEffect(() => {
     params.then((p) => setPeladaId(p.id))
@@ -161,9 +259,31 @@ export default function AoVivoPage({ params }: Props) {
     setHistorico(hist)
   }, [peladaId])
 
-  const handleIniciar = async () => {
+  const handleIniciarTimer = async () => {
+    if (!confrontoAtual || !isAdmin) return
+    await confrontoService.iniciarTimer(confrontoAtual.id)
+    await refreshConfronto()
+    toast({ title: "Timer iniciado! ⏱️", variant: "success" })
+  }
+
+  const handlePausarTimer = async () => {
+    if (!confrontoAtual || !isAdmin) return
+    await confrontoService.pausarTimer(confrontoAtual.id)
+    await refreshConfronto()
+    toast({ title: "Timer pausado ⏸️" })
+  }
+
+  const handleResetarTimer = async () => {
+    if (!confrontoAtual || !isAdmin) return
+    await confrontoService.resetarTimer(confrontoAtual.id)
+    await refreshConfronto()
+    toast({ title: "Timer resetado 🔄" })
+  }
+
+  const handleIniciar = async (durationMinutes?: number) => {
     if (!pelada || !isAdmin) return
     setIsIniciando(true)
+    setShowTimerConfig(false)
     try {
       // Busca o último sorteio
       const sorteios = await peladaService.getHistoricoSorteios(peladaId)
@@ -176,10 +296,14 @@ export default function AoVivoPage({ params }: Props) {
         return
       }
       const ultimoSorteio = sorteios[0]
-      const confronto = await confrontoService.iniciarConfrontos(peladaId, ultimoSorteio.id)
+      const tempoLimite = (durationMinutes || selectedDuration) * 60
+      const confronto = await confrontoService.iniciarConfrontos(peladaId, ultimoSorteio.id, tempoLimite)
       if (confronto) {
         setConfrontoAtual(confronto)
-        toast({ title: "Confrontos iniciados! 🎮", variant: "success" })
+        toast({
+          title: `Confrontos iniciados! ⏱️ ${durationMinutes || selectedDuration} min`,
+          variant: "success",
+        })
       }
     } catch (error) {
       toast({
@@ -322,7 +446,7 @@ export default function AoVivoPage({ params }: Props) {
                 <Button
                   variant="glow"
                   size="sm"
-                  onClick={handleIniciar}
+                  onClick={() => setShowTimerConfig(true)}
                   disabled={isIniciando}
                 >
                   {isIniciando ? (
@@ -363,6 +487,90 @@ export default function AoVivoPage({ params }: Props) {
               </p>
             </div>
           </FadeIn>
+
+          {/* Timer Config Dialog */}
+          <AnimatePresence>
+            {showTimerConfig && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+                onClick={() => setShowTimerConfig(false)}
+              >
+                <motion.div
+                  initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                  animate={{ scale: 1, opacity: 1, y: 0 }}
+                  exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                  className="w-full max-w-md rounded-2xl bg-gradient-to-br from-[#1a1a1a] to-[#121212] border border-[#2a2a2a] p-8"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="text-center mb-6">
+                    <motion.div
+                      animate={{ rotate: [0, -5, 5, -5, 0] }}
+                      transition={{ duration: 2, repeat: Infinity }}
+                      className="text-5xl mb-4"
+                    >
+                      ⏱️
+                    </motion.div>
+                    <h2 className="text-xl font-bold text-[#fafafa] mb-2">
+                      Configurar Timer
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                      Escolha a duração de cada confronto
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3 mb-6">
+                    {[
+                      { min: 5, label: "5 min", desc: "Rápido" },
+                      { min: 10, label: "10 min", desc: "Padrão" },
+                      { min: 15, label: "15 min", desc: "Completo" },
+                    ].map((opt) => (
+                      <motion.button
+                        key={opt.min}
+                        whileHover={{ scale: 1.03 }}
+                        whileTap={{ scale: 0.97 }}
+                        onClick={() => setSelectedDuration(opt.min)}
+                        className={`flex flex-col items-center gap-1 p-4 rounded-xl border transition-all ${
+                          selectedDuration === opt.min
+                            ? "border-[#00e676] bg-[#00e676]/10 text-[#00e676]"
+                            : "border-[#2a2a2a] bg-[#121212] text-muted-foreground hover:border-[#00e676]/30"
+                        }`}
+                      >
+                        <span className="text-2xl font-bold">{opt.min}</span>
+                        <span className="text-xs">min</span>
+                        <span className="text-[10px] mt-1 opacity-60">{opt.desc}</span>
+                      </motion.button>
+                    ))}
+                  </div>
+
+                  <div className="flex gap-3">
+                    <Button
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => setShowTimerConfig(false)}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
+                      variant="glow"
+                      className="flex-1"
+                      onClick={() => handleIniciar(selectedDuration)}
+                      disabled={isIniciando}
+                    >
+                      {isIniciando ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Play className="mr-2 h-4 w-4" />
+                      )}
+                      Iniciar!
+                    </Button>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* No confronto yet */}
           {!confrontoAtual && historico.length === 0 && (
@@ -413,7 +621,7 @@ export default function AoVivoPage({ params }: Props) {
                   {isAdmin && (
                     <Button
                       variant="glow"
-                      onClick={handleIniciar}
+                      onClick={() => setShowTimerConfig(true)}
                       disabled={isIniciando}
                     >
                       {isIniciando ? (
@@ -450,6 +658,104 @@ export default function AoVivoPage({ params }: Props) {
                 </AnimatePresence>
 
                 <div className="rounded-2xl bg-gradient-to-br from-[#1a1a1a] to-[#121212] border border-[#2a2a2a] overflow-hidden">
+                  {/* Timer */}
+                  {(() => {
+                    const tempoInfo = getTimerInfo()
+                    const isPausado = !confrontoAtual.iniciado_em
+                    const isAVencer = tempoInfo.restante <= 30 && tempoInfo.restante > 0
+                    const isEsgotado = tempoInfo.restante <= 0
+                    return (
+                      <div className="border-b border-[#2a2a2a] px-6 py-3">
+                        <div className="flex items-center justify-between gap-4">
+                          <div className="flex items-center gap-3">
+                            {isTimerRunning ? (
+                              <Timer className={`h-5 w-5 ${isAVencer ? "text-red-500" : "text-[#00e676]"}`} />
+                            ) : isPausado ? (
+                              <TimerOff className="h-5 w-5 text-muted-foreground" />
+                            ) : (
+                              <Clock className="h-5 w-5 text-muted-foreground" />
+                            )}
+                            <motion.span
+                              key={tempoInfo.display}
+                              initial={isAVencer ? { scale: 1.1 } : undefined}
+                              animate={{ scale: 1 }}
+                              className={`text-2xl font-mono font-bold tabular-nums ${
+                                isEsgotado
+                                  ? "text-red-500"
+                                  : isAVencer
+                                  ? "text-red-400"
+                                  : isTimerRunning
+                                  ? "text-[#00e676]"
+                                  : "text-muted-foreground"
+                              }`}
+                            >
+                              {isEsgotado ? "00:00" : tempoInfo.display}
+                            </motion.span>
+                            {isEsgotado && isTimerRunning && (
+                              <span className="text-xs text-red-500 font-semibold animate-pulse">
+                                TEMPO ESGOTADO!
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Admin Timer Controls */}
+                          {isAdmin && (
+                            <div className="flex items-center gap-1">
+                              {!isTimerRunning && !isEsgotado && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={handleIniciarTimer}
+                                  title="Iniciar timer"
+                                >
+                                  <Play className="h-4 w-4 text-[#00e676]" />
+                                </Button>
+                              )}
+                              {isTimerRunning && !isEsgotado && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={handlePausarTimer}
+                                  title="Pausar timer"
+                                >
+                                  <TimerOff className="h-4 w-4 text-yellow-500" />
+                                </Button>
+                              )}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={handleResetarTimer}
+                                title="Resetar timer"
+                              >
+                                <TimerReset className="h-4 w-4 text-muted-foreground" />
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Progress bar */}
+                        <div className="mt-2 w-full h-1.5 rounded-full bg-[#2a2a2a] overflow-hidden">
+                          <motion.div
+                            key={tempoInfo.progresso}
+                            initial={false}
+                            animate={{ width: `${Math.min(tempoInfo.progresso, 100)}%` }}
+                            transition={{ duration: 1, ease: "linear" }}
+                            className={`h-full rounded-full ${
+                              isAVencer
+                                ? "bg-red-500"
+                                : isTimerRunning
+                                ? "bg-[#00e676]"
+                                : "bg-muted-foreground/30"
+                            }`}
+                          />
+                        </div>
+                      </div>
+                    )
+                  })()}
+
                   {/* Teams vs Score */}
                   <div className="flex flex-col md:flex-row items-stretch">
                     {/* Time A */}

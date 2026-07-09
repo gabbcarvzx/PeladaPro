@@ -101,6 +101,9 @@ export interface Confronto {
   status: "em_andamento" | "finalizado"
   resultado: "time_a" | "time_b" | "empate" | null
   fila_restante?: string
+  tempo_limite: number
+  iniciado_em: string | null
+  tempo_restante: number | null
   ordem: number
   created_at: string
   updated_at: string

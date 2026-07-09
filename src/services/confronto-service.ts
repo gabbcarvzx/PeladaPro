@@ -16,7 +16,7 @@ export class ConfrontoService {
    * Inicia os confrontos a partir de um sorteio já realizado.
    * Cria a fila circular de times e gera o primeiro confronto.
    */
-  async iniciarConfrontos(peladaId: string, sorteioId: string): Promise<Confronto | null> {
+  async iniciarConfrontos(peladaId: string, sorteioId: string, tempoLimite?: number): Promise<Confronto | null> {
     // Busca o sorteio com os times
     const { data: sorteio } = await this.supabase
       .from("historico_sorteios")
@@ -64,6 +64,7 @@ export class ConfrontoService {
       filaTimes[1],
       1,
       filaJson,
+      tempoLimite,
     )
 
     return primeiro
@@ -79,6 +80,7 @@ export class ConfrontoService {
     timeB: { nome: string; jogadores: TimeSorteioJogador[] },
     ordem: number,
     filaRestante?: string,
+    tempoLimite?: number,
   ): Promise<Confronto | null> {
     const inserData: Record<string, unknown> = {
       pelada_id: peladaId,
@@ -88,6 +90,7 @@ export class ConfrontoService {
       time_a_jogadores: JSON.stringify(timeA.jogadores),
       time_b_jogadores: JSON.stringify(timeB.jogadores),
       ordem,
+      tempo_limite: tempoLimite || 600,
     }
 
     if (filaRestante) {
@@ -267,6 +270,7 @@ export class ConfrontoService {
     // Busca a fila restante
     const filaRestante = this.parseFila(confronto)
     const vencedor = this.getVencedor(confronto, resultado)
+    const tempoLimite = confronto.tempo_limite
 
     // Gera o próximo confronto
     let proximoConfronto: Confronto | null = null
@@ -284,6 +288,7 @@ export class ConfrontoService {
           proximos[1],
           confronto.ordem + 1,
           JSON.stringify(novaFila),
+          tempoLimite,
         )
       } else if (proximos.length === 1) {
         // Só tem 1 time na fila — ele enfrenta o time A (que empatou) de volta
@@ -297,6 +302,7 @@ export class ConfrontoService {
             filaReiniciada[1],
             confronto.ordem + 1,
             JSON.stringify(filaReiniciada.slice(2)),
+            tempoLimite,
           )
         }
       } else {
@@ -310,6 +316,7 @@ export class ConfrontoService {
             timesOriginais[1],
             confronto.ordem + 1,
             JSON.stringify(timesOriginais.slice(2)),
+            tempoLimite,
           )
         }
       }
@@ -326,6 +333,7 @@ export class ConfrontoService {
           proximo,
           confronto.ordem + 1,
           JSON.stringify(novaFila),
+          tempoLimite,
         )
       } else {
         // Fila vazia — reinicia com os times originais (vencedor + alguém)
@@ -345,6 +353,7 @@ export class ConfrontoService {
             restantes[0],
             confronto.ordem + 1,
             JSON.stringify(restantes.slice(1)),
+            tempoLimite,
           )
         } else {
           // Só tem 1 time restante — reinicia tudo
@@ -357,6 +366,7 @@ export class ConfrontoService {
               filaReiniciada[1],
               confronto.ordem + 1,
               JSON.stringify(filaReiniciada.slice(2)),
+              tempoLimite,
             )
           }
         }
@@ -477,6 +487,75 @@ export class ConfrontoService {
     const fila = this.parseFila(confronto)
 
     return [timeA, timeB, ...fila]
+  }
+
+  // ==========================================
+  // TIMER
+  // ==========================================
+
+  /**
+   * Inicia/resume o timer de um confronto
+   */
+  async iniciarTimer(confrontoId: string, tempoRestante?: number): Promise<Confronto | null> {
+    const update: Record<string, unknown> = {
+      iniciado_em: new Date().toISOString(),
+    }
+    if (tempoRestante !== undefined) {
+      update.tempo_restante = tempoRestante
+    }
+
+    const { data } = await this.supabase
+      .from("confrontos")
+      .update(update)
+      .eq("id", confrontoId)
+      .select()
+      .single()
+
+    return data as Confronto | null
+  }
+
+  /**
+   * Pausa o timer de um confronto, salvando o tempo restante
+   */
+  async pausarTimer(confrontoId: string): Promise<Confronto | null> {
+    const confronto = await this.getConfrontoById(confrontoId)
+    if (!confronto || !confronto.iniciado_em) {
+      throw new Error("Timer não está rodando")
+    }
+
+    const tempoLimite = confronto.tempo_restante || confronto.tempo_limite
+    const inicio = new Date(confronto.iniciado_em).getTime()
+    const decorrido = Math.floor((Date.now() - inicio) / 1000)
+    const restante = Math.max(0, tempoLimite - decorrido)
+
+    const { data } = await this.supabase
+      .from("confrontos")
+      .update({
+        iniciado_em: null,
+        tempo_restante: restante,
+      })
+      .eq("id", confrontoId)
+      .select()
+      .single()
+
+    return data as Confronto | null
+  }
+
+  /**
+   * Reseta o timer de um confronto para o tempo limite original
+   */
+  async resetarTimer(confrontoId: string): Promise<Confronto | null> {
+    const { data } = await this.supabase
+      .from("confrontos")
+      .update({
+        iniciado_em: null,
+        tempo_restante: null,
+      })
+      .eq("id", confrontoId)
+      .select()
+      .single()
+
+    return data as Confronto | null
   }
 
   /**
