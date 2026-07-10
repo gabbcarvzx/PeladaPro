@@ -76,6 +76,7 @@ export default function JoinPeladaPage({ params }: Props) {
     setJoining(true)
 
     try {
+      // RPC é idempotente (não gera erro se já participa) e bypassa RLS
       const success = await peladaService.addParticipante(pelada.id, user.id)
 
       if (success) {
@@ -86,13 +87,37 @@ export default function JoinPeladaPage({ params }: Props) {
           description: `Agora você faz parte de "${pelada.nome}"`,
           variant: "success",
         })
+      } else if (peladaFull) {
+        // Pelada lotada — adiciona como membro mesmo sem vaga
+        const memberSuccess = await peladaService.adicionarMembro(pelada.id, user.id)
+
+        if (memberSuccess) {
+          setIsParticipant(true)
+          setParticipantCount((prev) => prev + 1)
+          toast({
+            title: "Você entrou na pelada! 🎉",
+            description: "A pelada está lotada no momento, mas você já é membro. Confirme presença nos próximos jogos.",
+            variant: "success",
+          })
+        } else {
+          toast({
+            title: "Erro ao entrar",
+            description: "Ocorreu um erro ao adicionar você à pelada.",
+            variant: "destructive",
+          })
+          return // não redireciona em caso de erro
+        }
       } else {
         toast({
-          title: "Pelada lotada!",
-          description: "O limite de jogadores já foi atingido.",
+          title: "Erro ao entrar",
+          description: "Não foi possível entrar na pelada. Tente novamente.",
           variant: "destructive",
         })
+        return // não redireciona em caso de erro
       }
+
+      // Redireciona para o dashboard após sucesso
+      setTimeout(() => router.push("/dashboard"), 1500)
     } catch (error) {
       toast({
         title: "Erro ao entrar",
