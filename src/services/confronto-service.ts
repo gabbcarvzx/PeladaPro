@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { Confronto, EventoConfronto, TimeSorteioJogador, HistoricoSorteio } from "@/types"
-import { SubscriptionService } from "./subscription-service"
+import { PermissionService } from "./permission-service"
 
 export class ConfrontoService {
   private supabase: SupabaseClient
@@ -18,9 +18,9 @@ export class ConfrontoService {
    * Cria a fila circular de times e gera o primeiro confronto.
    */
   async iniciarConfrontos(peladaId: string, sorteioId: string, tempoLimite?: number, ocorrenciaId?: string): Promise<Confronto | null> {
-    // Proteção: verifica se o admin tem assinatura ativa
-    const subService = new SubscriptionService(this.supabase)
-    await subService.assertCanManagePelada(await this.getAdminId(peladaId), peladaId)
+    // Proteção: verifica se o admin tem permissão
+    const permService = new PermissionService(this.supabase)
+    await permService.assertCanManagePelada(await this.getAdminId(peladaId), peladaId)
 
     // Busca o sorteio com os times
     const { data: sorteio } = await this.supabase
@@ -186,8 +186,8 @@ export class ConfrontoService {
     jogadorId: string,
     timeId: "a" | "b",
   ): Promise<EventoConfronto | null> {
-    // Proteção: verifica se o admin tem assinatura ativa
-    await this.verificarAdminAssinatura(confrontoId)
+    // Proteção: verifica se o admin tem permissão
+    await this.verificarAdminPermissao(confrontoId)
 
     // Incrementa o placar via RPC
     await this.supabase.rpc("incrementar_placar", {
@@ -218,8 +218,8 @@ export class ConfrontoService {
     jogadorId: string,
     timeId: "a" | "b",
   ): Promise<EventoConfronto | null> {
-    // Proteção: verifica se o admin tem assinatura ativa
-    await this.verificarAdminAssinatura(confrontoId)
+    // Proteção: verifica se o admin tem permissão
+    await this.verificarAdminPermissao(confrontoId)
 
     const { data } = await this.supabase
       .from("eventos_confronto")
@@ -264,8 +264,8 @@ export class ConfrontoService {
     confrontoId: string,
     resultado: "time_a" | "time_b" | "empate",
   ): Promise<{ confrontoFinalizado: Confronto; proximoConfronto: Confronto | null }> {
-    // Proteção: verifica se o admin tem assinatura ativa
-    await this.verificarAdminAssinatura(confrontoId)
+    // Proteção: verifica se o admin tem permissão
+    await this.verificarAdminPermissao(confrontoId)
 
     const confronto = await this.getConfrontoById(confrontoId)
     if (!confronto) throw new Error("Confronto não encontrado")
@@ -508,14 +508,14 @@ export class ConfrontoService {
   }
 
   /**
-   * Verifica se o admin do confronto tem assinatura ativa
+   * Verifica se o admin do confronto tem permissão de admin
    */
-  private async verificarAdminAssinatura(confrontoId: string): Promise<void> {
+  private async verificarAdminPermissao(confrontoId: string): Promise<void> {
     const confronto = await this.getConfrontoById(confrontoId)
     if (!confronto) throw new Error("Confronto não encontrado")
 
-    const subService = new SubscriptionService(this.supabase)
-    await subService.assertCanManagePelada(
+    const permService = new PermissionService(this.supabase)
+    await permService.assertCanManagePelada(
       await this.getAdminId(confronto.pelada_id),
       confronto.pelada_id,
     )
@@ -549,8 +549,8 @@ export class ConfrontoService {
    * Inicia/resume o timer de um confronto
    */
   async iniciarTimer(confrontoId: string, tempoRestante?: number): Promise<Confronto | null> {
-    // Proteção: verifica se o admin tem assinatura ativa
-    await this.verificarAdminAssinatura(confrontoId)
+    // Proteção: verifica se o admin tem permissão
+    await this.verificarAdminPermissao(confrontoId)
     const update: Record<string, unknown> = {
       iniciado_em: new Date().toISOString(),
     }
@@ -572,8 +572,8 @@ export class ConfrontoService {
    * Pausa o timer de um confronto, salvando o tempo restante
    */
   async pausarTimer(confrontoId: string): Promise<Confronto | null> {
-    // Proteção: verifica se o admin tem assinatura ativa
-    await this.verificarAdminAssinatura(confrontoId)
+    // Proteção: verifica se o admin tem permissão
+    await this.verificarAdminPermissao(confrontoId)
     const confronto = await this.getConfrontoById(confrontoId)
     if (!confronto || !confronto.iniciado_em) {
       throw new Error("Timer não está rodando")
@@ -601,8 +601,8 @@ export class ConfrontoService {
    * Reseta o timer de um confronto para o tempo limite original
    */
   async resetarTimer(confrontoId: string): Promise<Confronto | null> {
-    // Proteção: verifica se o admin tem assinatura ativa
-    await this.verificarAdminAssinatura(confrontoId)
+    // Proteção: verifica se o admin tem permissão
+    await this.verificarAdminPermissao(confrontoId)
     const { data } = await this.supabase
       .from("confrontos")
       .update({
@@ -620,9 +620,9 @@ export class ConfrontoService {
    * Finaliza uma rodada de confrontos (último confronto, sem próximo)
    */
   async finalizarRodada(peladaId: string): Promise<void> {
-    // Proteção: verifica se o admin tem assinatura ativa
-    const subService = new SubscriptionService(this.supabase)
-    await subService.assertCanManagePelada(await this.getAdminId(peladaId), peladaId)
+    // Proteção: verifica se o admin tem permissão
+    const permService = new PermissionService(this.supabase)
+    await permService.assertCanManagePelada(await this.getAdminId(peladaId), peladaId)
     await this.supabase
       .from("confrontos")
       .update({ status: "finalizado", resultado: "empate" })

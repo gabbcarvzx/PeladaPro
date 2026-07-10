@@ -20,7 +20,7 @@ import { Logo } from "@/components/ui/logo"
 import { PageTransition, FadeIn } from "@/components/layout/motion-wrapper"
 import { toast } from "@/components/ui/toaster"
 import { PeladaService } from "@/services/pelada-service"
-import { SubscriptionService } from "@/services/subscription-service"
+import { PermissionService } from "@/services/permission-service"
 import { PELADA_LIMITES } from "@/utils/constants"
 import {
   ArrowLeft,
@@ -34,7 +34,8 @@ import {
   Repeat,
   Clock,
   Sparkles,
-  CreditCard,
+  MessageCircle,
+  ArrowRight,
 } from "lucide-react"
 
 export default function CreatePeladaPage() {
@@ -53,7 +54,7 @@ export default function CreatePeladaPage() {
   const [diaSemana, setDiaSemana] = useState("4")
   const [horario, setHorario] = useState("20:00")
   const [saving, setSaving] = useState(false)
-  const [canCreate, setCanCreate] = useState<boolean | null>(null)
+  const [userRole, setUserRole] = useState<string>("")
   const [checkingAccess, setCheckingAccess] = useState(true)
 
   const DIAS_SEMANA = [
@@ -81,15 +82,15 @@ export default function CreatePeladaPage() {
 
   useEffect(() => {
     if (!user) return
-    const subscriptionService = new SubscriptionService(supabase)
-    subscriptionService.hasActiveSubscription(user.id).then((allowed) => {
-      setCanCreate(allowed)
+    const permissionService = new PermissionService(supabase)
+    permissionService.isAdmin(user.id).then((isAdmin) => {
+      setUserRole(isAdmin ? "admin" : "user")
       setCheckingAccess(false)
     })
   }, [user])
 
-  // Se não tem assinatura, mostra tela de bloqueio
-  if (!checkingAccess && canCreate === false) {
+  // Se não é admin, mostra tela profissional com WhatsApp
+  if (!checkingAccess && userRole !== "admin") {
     return (
       <div className="min-h-screen bg-muted/20">
         <header className="sticky top-0 z-50 border-b border-white/10 bg-[#0a0a0a]/80 backdrop-blur-md">
@@ -109,48 +110,82 @@ export default function CreatePeladaPage() {
         <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
           <PageTransition>
             <FadeIn>
-              <Card className="text-center border-[#ffab00]/20">
+              <Card className="text-center border-[#00e676]/20">
                 <CardHeader>
-                  <motion.div
-                    animate={{ scale: [1, 1.05, 1] }}
-                    transition={{ duration: 2, repeat: Infinity }}
-                    className="text-6xl mb-4"
-                  >
-                    ⚡
-                  </motion.div>
-                  <CardTitle className="text-2xl">Assinatura necessária</CardTitle>
+                  <div className="relative mx-auto w-16 h-16 mb-4">
+                    <motion.div
+                      animate={{ scale: [1, 1.08, 1] }}
+                      transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+                      className="w-16 h-16 rounded-2xl bg-[#00e676]/10 flex items-center justify-center"
+                    >
+                      <MessageCircle className="h-8 w-8 text-[#00e676]" />
+                    </motion.div>
+                  </div>
+                  <CardTitle className="text-2xl text-[#fafafa]">
+                    Criação de Pelada é exclusiva para administradores
+                  </CardTitle>
                   <CardDescription className="text-base">
-                    Para criar e administrar peladas, você precisa do plano <strong>PeladaPro Premium</strong>.
+                    Desbloqueie o controle total da sua pelada. Com o plano administrador,
+                    você pode criar times, gerenciar jogadores e muito mais.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  <div className="bg-[#121212] rounded-xl p-6 border border-[#2a2a2a] space-y-3">
-                    <p className="text-lg font-bold text-[#fafafa]">
-                      R$ 30,00<span className="text-sm font-normal text-muted-foreground">/mês</span>
-                    </p>
-                    <ul className="space-y-2 text-sm text-left">
-                      {[
-                        "Criar peladas ilimitadas",
-                        "Gerenciar lista de espera",
-                        "Sorteio de times",
-                        "Confrontos ao vivo",
-                        "Gols e assistências",
-                      ].map((item, i) => (
-                        <li key={i} className="flex items-center gap-2 text-[#fafafa]">
-                          <Sparkles className="h-4 w-4 text-[#00e676] shrink-0" />
-                          {item}
-                        </li>
-                      ))}
-                    </ul>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {[
+                      { icon: Trophy, title: "Controle total", desc: "Crie e gerencie sua pelada do seu jeito" },
+                      { icon: Users, title: "Lista de espera", desc: "Gestão automática de fila e prioridades" },
+                      { icon: Shuffle, title: "Sorteio ao vivo", desc: "Times equilibrados e confrontos dinâmicos" },
+                    ].map((item, i) => (
+                      <div
+                        key={i}
+                        className="flex flex-col items-center gap-2 p-4 rounded-xl bg-[#121212] border border-[#2a2a2a] text-center"
+                      >
+                        <div className="w-10 h-10 rounded-lg bg-[#00e676]/10 flex items-center justify-center">
+                          <item.icon className="h-5 w-5 text-[#00e676]" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-[#fafafa]">{item.title}</p>
+                          <p className="text-xs text-[#6b7280]">{item.desc}</p>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <Link href="/planos">
-                    <Button variant="glow" size="lg" className="w-full h-12 text-base">
-                      <CreditCard className="mr-2 h-5 w-5" />
-                      Assinar por R$ 30/mês
+
+                  <a
+                    href={`https://wa.me/5581992796870?text=${encodeURIComponent("Olá! Quero ativar o plano administrador do PeladaPro para criar e gerenciar minha pelada.")}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block group"
+                  >
+                    <Button
+                      variant="glow"
+                      size="lg"
+                      className="w-full h-12 text-base relative overflow-hidden"
+                    >
+                      <span className="relative z-10 flex items-center justify-center gap-2">
+                        <MessageCircle className="h-5 w-5 group-hover:scale-110 transition-transform" />
+                        Ativar Plano Administrador
+                      </span>
                     </Button>
-                  </Link>
+                  </a>
+
+                  <p className="text-xs text-[#6b7280] text-center flex items-center justify-center gap-1.5">
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#00e676] animate-pulse" />
+                    Atendimento rápido em horário comercial
+                  </p>
+
+                  <div className="border-t border-[#2a2a2a] pt-6">
+                    <Link href="/dashboard">
+                      <Button variant="outline" size="lg" className="w-full">
+                        <ArrowLeft className="mr-2 h-4 w-4" />
+                        Voltar
+                      </Button>
+                    </Link>
+                  </div>
+
                   <p className="text-xs text-muted-foreground">
-                    Participar de peladas por convite é gratuito. A assinatura é apenas para quem cria e administra.
+                    Participar de peladas por convite é gratuito para todos os usuários.
+                    A criação de peladas é exclusiva para administradores.
                   </p>
                 </CardContent>
               </Card>

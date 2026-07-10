@@ -25,6 +25,7 @@ import {
   Sparkles,
   CreditCard,
   CheckCircle2,
+  Shield,
 } from "lucide-react"
 import { Avatar, AvatarImage } from "@/components/ui/avatar"
 import { AvatarPlaceholder } from "@/components/ui/avatar-placeholder"
@@ -32,9 +33,9 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { BadgeStatus } from "@/components/ui/badge-status"
 import { AuthService } from "@/services/auth-service"
 import { PeladaService } from "@/services/pelada-service"
-import { SubscriptionService } from "@/services/subscription-service"
+import { PermissionService } from "@/services/permission-service"
 import { ThemeToggle } from "@/components/layout/theme-toggle"
-import type { Pelada } from "@/types"
+import type { Pelada, Profile } from "@/types"
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -42,9 +43,8 @@ export default function DashboardPage() {
   const peladaService = new PeladaService(supabase)
   const [peladas, setPeladas] = useState<Pelada[]>([])
   const [loadingPeladas, setLoadingPeladas] = useState(true)
-  const [subStatus, setSubStatus] = useState<string>("none")
-  const [diasTolerancia, setDiasTolerancia] = useState(0)
-  const [subExpiraEm, setSubExpiraEm] = useState<string | null>(null)
+  const [userRole, setUserRole] = useState<string>("")
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false)
 
   useEffect(() => {
     if (!loading && !user) {
@@ -55,7 +55,8 @@ export default function DashboardPage() {
   useEffect(() => {
     if (user) {
       loadPeladas()
-      loadSubscription()
+      loadUserRole()
+      checkSuperAdmin()
     }
   }, [user])
 
@@ -66,13 +67,18 @@ export default function DashboardPage() {
     setLoadingPeladas(false)
   }
 
-  const loadSubscription = async () => {
+  const loadUserRole = async () => {
     if (!user) return
-    const subService = new SubscriptionService(supabase)
-    const details = await subService.getSubscriptionDetails(user.id)
-    setSubStatus(details.status)
-    setDiasTolerancia(details.diasRestantes)
-    setSubExpiraEm(details.expiresAt)
+    const permService = new PermissionService(supabase)
+    const isAdmin = await permService.isAdmin(user.id)
+    setUserRole(isAdmin ? "admin" : "user")
+  }
+
+  const checkSuperAdmin = async () => {
+    if (!user) return
+    const permService = new PermissionService(supabase)
+    const isSuper = await permService.isSuperAdmin(user.id)
+    setIsSuperAdmin(isSuper)
   }
 
   const handleLogout = async () => {
@@ -108,53 +114,21 @@ export default function DashboardPage() {
             <Logo />
 
             <div className="flex items-center gap-1">
-              {subStatus !== "none" && (
-                <Link href="/planos">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className={`gap-1.5 text-xs group relative ${
-                      subStatus === "active" || (subStatus === "past_due" && diasTolerancia > 0)
-                        ? "text-[#00e676]"
-                        : "text-[#ff5252]"
-                    }`}
-                  >
-                    {subStatus === "active" || (subStatus === "past_due" && diasTolerancia > 0) ? (
-                      <CheckCircle2 className="h-3.5 w-3.5" />
-                    ) : (
-                      <CreditCard className="h-3.5 w-3.5" />
-                    )}
-                    <span className="hidden sm:inline">
-                      {subStatus === "active"
-                        ? "Premium"
-                        : subStatus === "past_due" && diasTolerancia > 0
-                        ? `${diasTolerancia}d`
-                        : "Regularizar"}
-                    </span>
-                    {/* Tooltip com detalhes */}
-                    <div className="absolute top-full mt-2 right-0 w-64 p-3 rounded-xl bg-[#1a1a1a] border border-[#2a2a2a] shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none z-50">
-                      <p className="text-xs font-medium text-[#fafafa] mb-2">
-                        {subStatus === "active" && "Assinatura Premium Ativa"}
-                        {subStatus === "past_due" && diasTolerancia > 0 && `Tolerância: ${diasTolerancia} dia(s)`}
-                        {subStatus === "past_due" && diasTolerancia <= 0 && "Assinatura vencida"}
-                        {subStatus === "pending" && "Pagamento pendente"}
-                        {subStatus === "canceled" && "Assinatura cancelada"}
-                      </p>
-                      {subExpiraEm && (
-                        <p className="text-xs text-[#6b7280]">
-                          {subStatus === "active" ? "Expira em" : "Vencimento"}: {SubscriptionService.formatarData(subExpiraEm)}
-                        </p>
-                      )}
-                      <p className="text-xs text-[#6b7280] mt-1">Clique para gerenciar</p>
-                    </div>
-                  </Button>
-                </Link>
+              {userRole === "admin" && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full bg-[#00e676]/10 text-[#00e676] border border-[#00e676]/20">
+                  <CheckCircle2 className="h-3 w-3" />
+                  Admin
+                </span>
               )}
-              {subStatus === "none" && (
-                <Link href="/planos">
-                  <Button variant="ghost" size="sm" className="gap-1.5 text-xs text-muted-foreground group relative">
-                    <CreditCard className="h-3.5 w-3.5" />
-                    <span className="hidden sm:inline">Assinar</span>
+              {isSuperAdmin && (
+                <Link href="/admin">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 text-xs border-[#00e676]/30 text-[#00e676] hover:bg-[#00e676]/10 hover:border-[#00e676]/50 transition-all duration-200"
+                  >
+                    <Shield className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Painel Admin</span>
                   </Button>
                 </Link>
               )}

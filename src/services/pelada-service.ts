@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { Pelada, PeladaOcorrencia, PeladaParticipante, ConfirmacaoDia, ListaEspera, HistoricoSorteio, SorteioModo } from "@/types"
-import { SubscriptionService } from "./subscription-service"
+import { PermissionService } from "./permission-service"
 
 export class PeladaService {
   private supabase: SupabaseClient
@@ -25,9 +25,9 @@ export class PeladaService {
     dia_semana?: number | null
     horario?: string | null
   }): Promise<Pelada | null> {
-    // Verifica se o usuário tem assinatura ativa
-    const subService = new SubscriptionService(this.supabase)
-    await subService.assertCanCreatePelada(data.admin_id)
+    // Verifica se o usuário tem permissão de admin
+    const permService = new PermissionService(this.supabase)
+    await permService.assertCanCreatePelada(data.admin_id)
 
     // Gera um link de convite único
     const { data: linkData } = await this.supabase.rpc("gerar_link_convite")
@@ -164,15 +164,15 @@ export class PeladaService {
    * Atualiza uma pelada
    */
   async update(peladaId: string, updates: Partial<Pelada>): Promise<Pelada | null> {
-    // Proteção: verifica se o admin tem assinatura ativa
-    const subService = new SubscriptionService(this.supabase)
+    // Proteção: verifica se o admin tem permissão
+    const permService = new PermissionService(this.supabase)
     const { data: pelada } = await this.supabase
       .from("peladas")
       .select("admin_id")
       .eq("id", peladaId)
       .single()
     if (!pelada) return null
-    await subService.assertCanManagePelada((pelada as any).admin_id, peladaId)
+    await permService.assertCanManagePelada((pelada as any).admin_id, peladaId)
 
     const { data } = await this.supabase
       .from("peladas")
@@ -209,8 +209,8 @@ export class PeladaService {
    * sem verificar limite de jogadores.
    */
   async adminPromoverDaFila(peladaId: string, userId: string, dataJogo: string): Promise<boolean> {
-    // Proteção: verifica se o admin tem assinatura ativa
-    const subService = new SubscriptionService(this.supabase)
+    // Proteção: verifica se o admin tem permissão
+    const permService = new PermissionService(this.supabase)
     const { data: pelada } = await this.supabase
       .from("peladas")
       .select("admin_id")
@@ -219,7 +219,7 @@ export class PeladaService {
 
     if (!pelada) return false
     const adminId = (pelada as any).admin_id
-    await subService.assertCanManagePelada(adminId, peladaId)
+    await permService.assertCanManagePelada(adminId, peladaId)
     // Remove da lista de espera
     const { error: deleteError } = await this.supabase
       .from("lista_espera")
@@ -306,15 +306,15 @@ export class PeladaService {
    * Remove participante de uma pelada
    */
   async removeParticipante(peladaId: string, userId: string): Promise<void> {
-    // Proteção: verifica se o admin tem assinatura ativa
-    const subService = new SubscriptionService(this.supabase)
+    // Proteção: verifica se o admin tem permissão
+    const permService = new PermissionService(this.supabase)
     const { data: pelada } = await this.supabase
       .from("peladas")
       .select("admin_id")
       .eq("id", peladaId)
       .single()
     if (pelada) {
-      await subService.assertCanManagePelada((pelada as any).admin_id, peladaId)
+      await permService.assertCanManagePelada((pelada as any).admin_id, peladaId)
     }
 
     await this.supabase
@@ -328,15 +328,15 @@ export class PeladaService {
    * Altera o tipo do jogador (mensalista/diarista)
    */
   async alterarTipoJogador(peladaId: string, userId: string, tipo: "mensalista" | "diarista"): Promise<void> {
-    // Proteção: verifica se o admin tem assinatura ativa
-    const subService = new SubscriptionService(this.supabase)
+    // Proteção: verifica se o admin tem permissão
+    const permService = new PermissionService(this.supabase)
     const { data: pelada } = await this.supabase
       .from("peladas")
       .select("admin_id")
       .eq("id", peladaId)
       .single()
     if (pelada) {
-      await subService.assertCanManagePelada((pelada as any).admin_id, peladaId)
+      await permService.assertCanManagePelada((pelada as any).admin_id, peladaId)
     }
 
     await this.supabase
@@ -502,8 +502,8 @@ export class PeladaService {
    * Admin confirma chegada do jogador
    */
   async confirmarChegada(peladaId: string, userId: string, dataJogo: string, ordem: number): Promise<void> {
-    // Proteção: verifica se o admin tem assinatura ativa
-    const subService = new SubscriptionService(this.supabase)
+    // Proteção: verifica se o admin tem permissão
+    const permService = new PermissionService(this.supabase)
     const { data: pelada } = await this.supabase
       .from("peladas")
       .select("admin_id")
@@ -512,7 +512,7 @@ export class PeladaService {
 
     if (!pelada) throw new Error("Pelada não encontrada")
     const adminId = (pelada as any).admin_id
-    await subService.assertCanManagePelada(adminId, peladaId)
+    await permService.assertCanManagePelada(adminId, peladaId)
 
     await this.supabase
       .from("confirmacoes_dia")
@@ -613,8 +613,8 @@ export class PeladaService {
     jogadoresPorTime: number,
     ocorrenciaId?: string,
   ): Promise<HistoricoSorteio | null> {
-    // Proteção: verifica se o admin tem assinatura ativa
-    const subService = new SubscriptionService(this.supabase)
+    // Proteção: verifica se o admin tem permissão
+    const permService = new PermissionService(this.supabase)
     const { data: pelada } = await this.supabase
       .from("peladas")
       .select("admin_id")
@@ -623,7 +623,7 @@ export class PeladaService {
 
     if (!pelada) throw new Error("Pelada não encontrada")
     const adminId = (pelada as any).admin_id
-    await subService.assertCanManagePelada(adminId, peladaId)
+    await permService.assertCanManagePelada(adminId, peladaId)
 
     const times = this.gerarTimes(participantes, modo, numeroTimes, jogadoresPorTime)
 
