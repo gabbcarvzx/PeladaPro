@@ -453,12 +453,15 @@ export default function PeladaDetailPage({ params }: Props) {
                                     <AvatarPlaceholder name={participante.profile?.nome} size="md" />
                                   )}
                                   <div className="flex items-center gap-2">
-                                    <p className="font-medium text-sm text-[#fafafa]">
+                                    <Link
+                                      href={`/jogador/${participante.user_id}`}
+                                      className="font-medium text-sm text-[#fafafa] hover:text-[#00e676] transition-colors duration-200"
+                                    >
                                       {participante.profile?.nome || "Jogador"}
-                                      {participante.user_id === pelada.admin_id && (
-                                        <BadgeStatus type="admin" className="ml-1" />
-                                      )}
-                                    </p>
+                                    </Link>
+                                    {participante.user_id === pelada.admin_id && (
+                                      <BadgeStatus type="admin" className="ml-1" />
+                                    )}
                                     <BadgeStatus type={participante.tipo} />
                                   </div>
                                 </div>

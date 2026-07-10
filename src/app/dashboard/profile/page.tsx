@@ -35,9 +35,20 @@ export default function ProfilePage() {
 
   const [nome, setNome] = useState("")
   const [numeroFavorito, setNumeroFavorito] = useState("")
+  const [posicoes, setPosicoes] = useState<string[]>([])
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
+
+  const POSICOES_DISPONIVEIS = [
+    "Goleiro",
+    "Zagueiro",
+    "Lateral",
+    "Volante",
+    "Meio-campo",
+    "Atacante",
+    "Ponta",
+  ]
 
   useEffect(() => {
     if (!loading && !user) {
@@ -49,6 +60,7 @@ export default function ProfilePage() {
     if (profile) {
       setNome(profile.nome || "")
       setNumeroFavorito(profile.numero_favorito?.toString() || "")
+      setPosicoes(profile.posicoes || [])
       setAvatarPreview(null)
     }
   }, [profile])
@@ -62,6 +74,7 @@ export default function ProfilePage() {
       await authService.updateProfile(user.id, {
         nome,
         numero_favorito: numeroFavorito ? parseInt(numeroFavorito) : null,
+        posicoes,
       })
 
       await refreshProfile()
@@ -261,6 +274,41 @@ export default function ProfilePage() {
                         </div>
                         <p className="text-xs text-muted-foreground">
                           Número da camisa (0-99)
+                        </p>
+                      </div>
+
+                      {/* Posições */}
+                      <div className="space-y-2">
+                        <Label>Posições em campo</Label>
+                        <div className="flex flex-wrap gap-2">
+                          {POSICOES_DISPONIVEIS.map((pos) => {
+                            const selected = posicoes.includes(pos)
+                            return (
+                              <button
+                                key={pos}
+                                type="button"
+                                onClick={() => {
+                                  setPosicoes((prev) =>
+                                    selected
+                                      ? prev.filter((p) => p !== pos)
+                                      : prev.length < 2
+                                      ? [...prev, pos]
+                                      : prev,
+                                  )
+                                }}
+                                className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all duration-200 ${
+                                  selected
+                                    ? "bg-[#00e676]/10 text-[#00e676] border-[#00e676]/30"
+                                    : "bg-[#121212] text-[#a3a3a3] border-[#2a2a2a] hover:border-[#00e676]/20 hover:text-[#fafafa]"
+                                }`}
+                              >
+                                {pos}
+                              </button>
+                            )
+                          })}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Escolha até 2 posições
                         </p>
                       </div>
 

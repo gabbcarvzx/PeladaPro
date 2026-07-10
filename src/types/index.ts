@@ -13,6 +13,7 @@ export interface ProfileUpdate {
   nome?: string
   avatar_url?: string | null
   numero_favorito?: number | null
+  posicoes?: string[]
 }
 
 export interface Profile {
@@ -21,6 +22,7 @@ export interface Profile {
   nome: string
   avatar_url: string | null
   numero_favorito: number | null
+  posicoes: string[]
   tipo: PlayerType
   role: "user" | "admin"
   created_at: string
