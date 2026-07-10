@@ -21,3 +21,13 @@ export const CORES_TIMES = [
   { nome: "Cinza", bg: "bg-gray-500", text: "text-white" },
 ] as const
 
+export const POSICOES_DISPONIVEIS = [
+  "Goleiro",
+  "Zagueiro",
+  "Lateral",
+  "Volante",
+  "Meio-campo",
+  "Atacante",
+  "Ponta",
+] as const
+

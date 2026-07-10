@@ -24,21 +24,12 @@ import {
   Shirt,
   Award,
 } from "lucide-react"
+import { POSICOES_DISPONIVEIS } from "@/utils/constants"
 import type { Pelada, Profile } from "@/types"
 
 interface Props {
   params: Promise<{ id: string }>
 }
-
-const POSICOES_DISPONIVEIS = [
-  "Goleiro",
-  "Zagueiro",
-  "Lateral",
-  "Volante",
-  "Meio-campo",
-  "Atacante",
-  "Ponta",
-]
 
 export default function JogadorPage({ params }: Props) {
   const router = useRouter()

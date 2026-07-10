@@ -26,6 +26,7 @@ import {
   LogOut,
 } from "lucide-react"
 import Link from "next/link"
+import { POSICOES_DISPONIVEIS } from "@/utils/constants"
 
 export default function ProfilePage() {
   const router = useRouter()
@@ -39,16 +40,6 @@ export default function ProfilePage() {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
-
-  const POSICOES_DISPONIVEIS = [
-    "Goleiro",
-    "Zagueiro",
-    "Lateral",
-    "Volante",
-    "Meio-campo",
-    "Atacante",
-    "Ponta",
-  ]
 
   useEffect(() => {
     if (!loading && !user) {
