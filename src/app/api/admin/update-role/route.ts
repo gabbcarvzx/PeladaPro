@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { getAdminClient } from "@/lib/supabase/admin"
 
 /**
  * POST /api/admin/update-role
@@ -13,12 +14,15 @@ import { createClient } from "@/lib/supabase/server"
  * Segurança:
  * 1. Verifica autenticação
  * 2. Verifica se é super admin pelo email
- * 3. Atualiza role no banco
+ * 3. Usa service_role key para BYPASSAR RLS no UPDATE
  * 4. Loga a ação
+ * 5. Faz SELECT de verificação pós-update
  */
 export async function POST(request: Request) {
   try {
-    // 1. Verifica autenticação
+    // ==========================================
+    // 1. VERIFICA AUTENTICAÇÃO
+    // ==========================================
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
 
@@ -29,7 +33,9 @@ export async function POST(request: Request) {
       )
     }
 
-    // 2. Verifica se é super admin
+    // ==========================================
+    // 2. VERIFICA SE É SUPER ADMIN
+    // ==========================================
     const { data: profile } = await supabase
       .from("profiles")
       .select("email")
@@ -47,7 +53,9 @@ export async function POST(request: Request) {
       )
     }
 
-    // 3. Valida body
+    // ==========================================
+    // 3. VALIDA BODY
+    // ==========================================
     const body = await request.json()
     const { userId, role } = body as { userId?: string; role?: string }
 
@@ -65,9 +73,14 @@ export async function POST(request: Request) {
       )
     }
 
-    // 4. Segurança: impede remover o ÚLTIMO admin
+    // ==========================================
+    // 4. SEGURANÇA: impede remover o ÚLTIMO admin
+    // ==========================================
+    // Usa service_role para contar admins (pode ler todos os profiles)
+    const adminClient = getAdminClient()
+
     if (role === "user") {
-      const { count } = await supabase
+      const { count } = await adminClient
         .from("profiles")
         .select("*", { count: "exact", head: true })
         .eq("role", "admin")
@@ -80,8 +93,12 @@ export async function POST(request: Request) {
       }
     }
 
-    // 5. Atualiza role no banco
-    const { error: updateError } = await supabase
+    // ==========================================
+    // 5. ATUALIZA ROLE (COM SERVICE ROLE — BYPASSA RLS)
+    // ==========================================
+    console.log(`[ADMIN] Super admin ${user.email} alterando role de ${userId} para ${role}`)
+
+    const { error: updateError } = await adminClient
       .from("profiles")
       .update({ role })
       .eq("id", userId)
@@ -89,12 +106,39 @@ export async function POST(request: Request) {
     if (updateError) {
       console.error(`[ADMIN] Erro ao atualizar role:`, updateError)
       return NextResponse.json(
-        { error: "Erro ao atualizar role no banco" },
+        { error: "Erro ao atualizar role no banco: " + updateError.message },
         { status: 500 },
       )
     }
 
-    console.log(`[ADMIN] Super admin ${user.email} alterou role de ${userId} para ${role}`)
+    // ==========================================
+    // 6. VERIFICA PERSISTÊNCIA (SELECT pós-update)
+    // ==========================================
+    const { data: verifyData, error: verifyError } = await adminClient
+      .from("profiles")
+      .select("id, role")
+      .eq("id", userId)
+      .single()
+
+    if (verifyError) {
+      console.error(`[ADMIN] Erro ao verificar role após update:`, verifyError)
+      return NextResponse.json(
+        { error: "Role atualizada, mas falha ao verificar persistência. Verifique o banco." },
+        { status: 500 },
+      )
+    }
+
+    const verify = verifyData as { id: string; role: string } | null
+
+    if (!verify || verify.role !== role) {
+      console.error(`[ADMIN] ROLE NÃO PERSISTIU! Esperado=${role}, Encontrado=${verify?.role}`)
+      return NextResponse.json(
+        { error: "Role não foi persistida corretamente. Contate o suporte." },
+        { status: 500 },
+      )
+    }
+
+    console.log(`[ADMIN] ✅ Role de ${userId} alterada para ${role} (verificado: ${verify.role})`)
 
     return NextResponse.json({
       success: true,

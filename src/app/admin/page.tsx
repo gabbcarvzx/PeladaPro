@@ -120,10 +120,8 @@ export default function AdminPage() {
         variant: "success",
       })
 
-      // Atualiza localmente
-      setUsers((prev) =>
-        prev.map((u) => (u.id === userId ? { ...u, role: newRole } : u)),
-      )
+      // Re-fetch do banco para garantir consistência
+      await loadUsers()
     } catch (error) {
       toast({
         title: "Erro",
