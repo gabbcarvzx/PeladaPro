@@ -72,16 +72,4 @@ export class AuthService {
     return urlData.publicUrl
   }
 
-  /**
-   * Busca jogadores pelo nome (para adicionar em peladas)
-   */
-  async searchPlayers(query: string): Promise<Profile[]> {
-    const { data } = await this.supabase
-      .from("profiles")
-      .select("*")
-      .ilike("nome", `%${query}%`)
-      .limit(10)
-
-    return (data as Profile[]) || []
-  }
 }
