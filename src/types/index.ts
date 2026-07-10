@@ -36,6 +36,7 @@ export interface Pelada {
   invite_code: string
   admin_id: string
   limite_jogadores: number
+  limite_por_ocorrencia: number
   numero_times: number
   jogadores_por_time: number
   local: string | null

@@ -16,6 +16,7 @@ export class PeladaService {
     nome: string
     descricao?: string
     limite_jogadores: number
+    limite_por_ocorrencia?: number
     numero_times: number
     jogadores_por_time: number
     local?: string
@@ -39,6 +40,7 @@ export class PeladaService {
         nome: data.nome,
         descricao: data.descricao,
         limite_jogadores: data.limite_jogadores,
+        limite_por_ocorrencia: data.limite_por_ocorrencia || 25,
         numero_times: data.numero_times,
         jogadores_por_time: data.jogadores_por_time,
         local: data.local,
@@ -371,137 +373,65 @@ export class PeladaService {
   }
 
   /**
-   * Confirma presença para um dia específico
-   * Se a pelada estiver lotada e o jogador for diarista,
-   * vai automaticamente para a lista de espera.
-   * Mensalistas sempre entram (prioridade).
+   * Confirma presença para um dia específico.
+   * Usa RPC transacional (com lock) para evitar race condition.
+   * Regras:
+   *   - Mensalistas sempre entram (prioridade)
+   *   - Diaristas entram se houver vaga, senão vão para fila de espera
+   *   - Participantes são ilimitados na pelada, apenas o limite por ocorrência conta
    */
   async confirmarPresenca(peladaId: string, userId: string, dataJogo: string, ocorrenciaId?: string): Promise<{ status: "confirmado" | "fila"; posicao?: number }> {
-    if (!(await this.isParticipante(peladaId, userId))) {
-      throw new Error("Você não é participante desta pelada")
-    }
-
-    const pelada = await this.getById(peladaId)
-    if (!pelada) throw new Error("Pelada não encontrada")
-
-    // Busca o tipo do jogador na pelada
-    const participantes = await this.getParticipantes(peladaId)
-    const participante = participantes.find((p) => p.user_id === userId)
-    if (!participante) throw new Error("Participante não encontrado")
-
-    // Conta confirmados atuais
-    const confirmados = await this.getConfirmacoes(peladaId, dataJogo)
-    const confirmadosCount = confirmados.filter((c) => c.status === "confirmado").length
-    const isMensalista = participante.tipo === "mensalista"
-
-    // Se é mensalista OU ainda há vagas, confirma normalmente
-    if (isMensalista || confirmadosCount < pelada.limite_jogadores) {
-      await this.supabase.from("confirmacoes_dia").upsert({
-        pelada_id: peladaId,
-        user_id: userId,
-        data_jogo: dataJogo,
-        status: "confirmado",
-        ...(ocorrenciaId ? { pelada_ocorrencia_id: ocorrenciaId } : {}),
-      }, {
-        onConflict: "pelada_id, user_id, data_jogo",
-      })
-
-      // Se é mensalista e a pelada está cheia, ainda confirma (prioridade)
-      // Remove da fila de espera caso estivesse
-      await this.supabase
-        .from("lista_espera")
-        .delete()
-        .eq("pelada_id", peladaId)
-        .eq("user_id", userId)
-        .eq("data_jogo", dataJogo)
-
-      return { status: "confirmado" }
-    }
-
-    // Pelada lotada e jogador é diarista → vai para fila de espera
-    const { data: posicaoData } = await this.supabase.rpc("proxima_posicao_fila", {
+    const { data, error } = await this.supabase.rpc("confirmar_presenca_ocorrencia", {
       p_pelada_id: peladaId,
-      p_data: dataJogo,
-    })
-    const posicao = (posicaoData as number) || 1
-
-    // Primeiro upsert na confirmação como pendente
-    await this.supabase.from("confirmacoes_dia").upsert({
-      pelada_id: peladaId,
-      user_id: userId,
-      data_jogo: dataJogo,
-      status: "pendente",
-      ...(ocorrenciaId ? { pelada_ocorrencia_id: ocorrenciaId } : {}),
-    }, {
-      onConflict: "pelada_id, user_id, data_jogo",
+      p_user_id: userId,
+      p_data_jogo: dataJogo,
+      p_ocorrencia_id: ocorrenciaId || null,
     })
 
-    // Depois insere na fila de espera
-    await this.supabase.from("lista_espera").insert({
-      pelada_id: peladaId,
-      user_id: userId,
-      data_jogo: dataJogo,
-      posicao,
-      prioridade: "diarista",
-      ...(ocorrenciaId ? { pelada_ocorrencia_id: ocorrenciaId } : {}),
-    })
+    if (error || !data) {
+      console.error("[CONFIRMAR] Erro no RPC:", error)
+      const errMsg = (data as any)?.error || error?.message || "Erro ao confirmar presença"
+      throw new Error(errMsg)
+    }
 
-    return { status: "fila", posicao }
+    const result = data as { status: string; posicao?: number; error?: string }
+    if (result.error) {
+      throw new Error(result.error)
+    }
+
+    return {
+      status: result.status as "confirmado" | "fila",
+      posicao: result.posicao,
+    }
   }
 
   /**
-   * Recusa presença para um dia específico
-   * Se o jogador estava confirmado, promove automaticamente
-   * o primeiro da fila de espera.
+   * Recusa presença para um dia específico.
+   * Usa RPC transacional (com lock) que remove a confirmação
+   * e promove automaticamente o primeiro da fila de espera.
    */
   async recusarPresenca(peladaId: string, userId: string, dataJogo: string, ocorrenciaId?: string): Promise<{ promovido: boolean; nomePromovido?: string }> {
-    if (!(await this.isParticipante(peladaId, userId))) {
-      throw new Error("Você não é participante desta pelada")
-    }
-
-    // Verificar status atual antes de recusar
-    const confirmacoes = await this.getConfirmacoes(peladaId, dataJogo)
-    const minhaConfirmacao = confirmacoes.find((c) => c.user_id === userId)
-    const estavaConfirmado = minhaConfirmacao?.status === "confirmado"
-
-    // Remove da fila de espera se estiver
-    await this.supabase
-      .from("lista_espera")
-      .delete()
-      .eq("pelada_id", peladaId)
-      .eq("user_id", userId)
-      .eq("data_jogo", dataJogo)
-
-    await this.supabase.from("confirmacoes_dia").upsert({
-      pelada_id: peladaId,
-      user_id: userId,
-      data_jogo: dataJogo,
-      status: "recusado",
-      ...(ocorrenciaId ? { pelada_ocorrencia_id: ocorrenciaId } : {}),
-    }, {
-      onConflict: "pelada_id, user_id, data_jogo",
+    const { data, error } = await this.supabase.rpc("cancelar_presenca_ocorrencia", {
+      p_pelada_id: peladaId,
+      p_user_id: userId,
+      p_data_jogo: dataJogo,
+      p_ocorrencia_id: ocorrenciaId || null,
     })
 
-    // Se estava confirmado, promove primeiro da fila
-    if (estavaConfirmado) {
-      const { data: promovidoId } = await this.supabase.rpc("promover_primeiro_fila", {
-        p_pelada_id: peladaId,
-        p_data: dataJogo,
-      })
-
-      if (promovidoId) {
-        // Buscar nome do promovido
-        const { data: profile } = await this.supabase
-          .from("profiles")
-          .select("nome")
-          .eq("id", promovidoId as string)
-          .single()
-
-        return { promovido: true, nomePromovido: (profile as any)?.nome || "Jogador" }
-      }
+    if (error) {
+      console.error("[RECUSAR] Erro no RPC:", error)
+      throw new Error("Erro ao recusar presença")
     }
 
-    return { promovido: false }
+    const result = data as { promovido: boolean; nome_promovido?: string; error?: string }
+    if (result.error) {
+      throw new Error(result.error)
+    }
+
+    return {
+      promovido: result.promovido,
+      nomePromovido: result.nome_promovido,
+    }
   }
 
   /**

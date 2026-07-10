@@ -382,7 +382,7 @@ export default function PeladaDetailPage({ params }: Props) {
                   <div className="flex items-center gap-2 text-[#a3a3a3]">
                     <Users className="h-4 w-4 text-[#00e676]" />
                     <span className="text-sm">
-                      {participantes.length}/{pelada.limite_jogadores} jogadores
+                      {participantes.length} participantes
                     </span>
                   </div>
                   <div className="flex items-center gap-2 text-[#a3a3a3]">
@@ -398,9 +398,7 @@ export default function PeladaDetailPage({ params }: Props) {
                   <motion.div
                     initial={{ width: 0 }}
                     animate={{
-                      width: `${
-                        (participantes.length / pelada.limite_jogadores) * 100
-                      }%`,
+                      width: `${Math.min((confirmadosCount / (pelada.limite_por_ocorrencia || 25)) * 100, 100)}%`,
                     }}
                     className="h-full rounded-full bg-[#00e676]"
                   />
@@ -579,7 +577,9 @@ export default function PeladaDetailPage({ params }: Props) {
                             <CheckCircle2 className="h-4 w-4" />
                             Confirmados
                           </span>
-                          <span className="font-semibold text-[#00e676]">{confirmadosCount}</span>
+                          <span className="font-semibold text-[#00e676]">
+                            {confirmadosCount}/{pelada.limite_por_ocorrencia || 25}
+                          </span>
                         </div>
                         <div className="flex items-center justify-between p-2 rounded-lg bg-[#ff5252]/5 border border-[#ff5252]/10">
                           <span className="flex items-center gap-1 text-[#ff5252]">
@@ -838,7 +838,7 @@ export default function PeladaDetailPage({ params }: Props) {
                                   {filaEspera.length} jogador{filaEspera.length > 1 ? "es" : ""} na fila
                                 </span>
                                 <span>
-                                  Limite: {participantes.length}/{pelada.limite_jogadores}
+                                  Vagas: {confirmadosCount}/{pelada.limite_por_ocorrencia || 25}
                                 </span>
                               </div>
                             </>
@@ -926,9 +926,15 @@ export default function PeladaDetailPage({ params }: Props) {
                       <span className="text-[#fafafa]">{pelada.jogadores_por_time}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-[#6b7280]">Vagas</span>
+                      <span className="text-[#6b7280]">Participantes</span>
                       <span className="text-[#fafafa]">
-                        {participantes.length}/{pelada.limite_jogadores}
+                        {participantes.length}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[#6b7280]">Vagas por data</span>
+                      <span className="text-[#fafafa]">
+                        {pelada.limite_por_ocorrencia || 25}
                       </span>
                     </div>
                     <div className="flex justify-between">

@@ -48,6 +48,7 @@ export default function CreatePeladaPage() {
   const [local, setLocal] = useState("")
   const [data, setData] = useState("")
   const [limiteJogadores, setLimiteJogadores] = useState("20")
+  const [limitePorOcorrencia, setLimitePorOcorrencia] = useState("25")
   const [numeroTimes, setNumeroTimes] = useState("2")
   const [jogadoresPorTime, setJogadoresPorTime] = useState("5")
   const [recorrente, setRecorrente] = useState(false)
@@ -209,6 +210,7 @@ export default function CreatePeladaPage() {
         local: local || undefined,
         data: recorrente ? undefined : data || undefined,
         limite_jogadores: parseInt(limiteJogadores),
+        limite_por_ocorrencia: parseInt(limitePorOcorrencia),
         numero_times: parseInt(numeroTimes),
         jogadores_por_time: parseInt(jogadoresPorTime),
         admin_id: user.id,
@@ -239,6 +241,7 @@ export default function CreatePeladaPage() {
   }
 
   const totalJogadores = parseInt(limiteJogadores)
+  const vagasPorData = parseInt(limitePorOcorrencia)
   const totalTimes = parseInt(numeroTimes)
   const porTime = parseInt(jogadoresPorTime)
   const capacidadeTimes = totalTimes * porTime
@@ -412,9 +415,9 @@ export default function CreatePeladaPage() {
                     </h3>
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      {/* Limite de jogadores */}
+                      {/* Limite de participantes */}
                       <div className="space-y-2">
-                        <Label>Limite de jogadores</Label>
+                        <Label>Limite de participantes</Label>
                         <Select
                           value={limiteJogadores}
                           onValueChange={setLimiteJogadores}
@@ -429,7 +432,7 @@ export default function CreatePeladaPage() {
                               (_, i) => i + PELADA_LIMITES.MIN_JOGADORES,
                             ).map((n) => (
                               <SelectItem key={n} value={n.toString()}>
-                                {n} jogadores
+                                {n} participantes
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -483,6 +486,30 @@ export default function CreatePeladaPage() {
                           </SelectContent>
                         </Select>
                       </div>
+
+                      {/* Limite por ocorrência */}
+                      <div className="space-y-2">
+                        <Label>Limite por data</Label>
+                        <Select
+                          value={limitePorOcorrencia}
+                          onValueChange={setLimitePorOcorrencia}
+                        >
+                          <SelectTrigger>
+                            <Calendar className="mr-2 h-4 w-4" />
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {[15, 20, 22, 24, 25, 26, 28, 30, 35, 40].map((n) => (
+                              <SelectItem key={n} value={n.toString()}>
+                                {n} por data
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                          Máximo de confirmados por ocorrência (diaristas). Mensalistas sempre entram.
+                        </p>
+                      </div>
                     </div>
 
                     {/* Resumo */}
@@ -504,7 +531,7 @@ export default function CreatePeladaPage() {
                             capacidadeOk ? "text-[#00e676]" : "text-[#ff5252]"
                           }`}
                         >
-                          {capacidadeTimes} vagas em {totalJogadores} jogadores
+                          {capacidadeTimes} vagas · {totalJogadores} participantes · {vagasPorData} por data
                         </span>
                       </div>
                       {!capacidadeOk && (
