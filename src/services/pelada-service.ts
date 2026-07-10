@@ -66,10 +66,11 @@ export class PeladaService {
   }
 
   /**
-   * Busca todas as peladas do usuário (como admin ou participante)
+   * Busca todas as peladas do usuário (como admin ou participante).
+   * Usa RPC security definer para peladas como participante (bypassa RLS).
    */
   async getUserPeladas(userId: string): Promise<Pelada[]> {
-    // Busca peladas onde o user é admin
+    // Busca peladas onde o user é admin (query direta já funciona pelo RLS: admin vê própria pelada)
     const { data: adminPeladas } = await this.supabase
       .from("peladas")
       .select("*")
@@ -82,23 +83,23 @@ export class PeladaService {
       .select("pelada_id")
       .eq("user_id", userId)
 
-    const adminIds = new Set((adminPeladas || []).map((p) => p.id))
+    const adminIds = new Set((adminPeladas || []).map((p: any) => p.id))
     const participantIds = (participacoes || [])
       .map((p) => p.pelada_id)
       .filter((id) => !adminIds.has(id))
 
-    let participantPeladas: any[] = []
+    let participantPeladas: Pelada[] = []
     if (participantIds.length > 0) {
-      const { data } = await this.supabase
-        .from("peladas")
-        .select("*")
-        .in("id", participantIds)
-        .order("created_at", { ascending: false })
-      participantPeladas = data || []
+      // Usa RPC security definer para bypassar RLS
+      const { data } = await this.supabase.rpc("buscar_por_ids", {
+        p_pelada_ids: participantIds,
+      })
+
+      participantPeladas = (data as Pelada[]) || []
     }
 
     // Mescla os resultados, admin primeiro
-    return [...(adminPeladas || []), ...participantPeladas] as Pelada[]
+    return [...(adminPeladas as Pelada[]), ...participantPeladas]
   }
 
   /**
@@ -124,16 +125,16 @@ export class PeladaService {
   }
 
   /**
-   * Busca pelada por ID
+   * Busca pelada por ID.
+   * Usa RPC security definer para bypassar RLS.
+   * Garante que participantes recém-adicionados consigam ler a pelada.
    */
   async getById(peladaId: string): Promise<Pelada | null> {
-    const { data } = await this.supabase
-      .from("peladas")
-      .select("*")
-      .eq("id", peladaId)
-      .single()
+    const { data } = await this.supabase.rpc("buscar_por_id", {
+      p_pelada_id: peladaId,
+    })
 
-    return data as Pelada | null
+    return (data as Pelada) || null
   }
 
   /**

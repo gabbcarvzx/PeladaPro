@@ -136,8 +136,9 @@ export default function EntrarPeladaPage({ params }: Props) {
         return // não redireciona em caso de erro
       }
 
-      // Redireciona para a página da pelada após sucesso
-      setTimeout(() => router.push(`/pelada/${pelada.id}`), 1500)
+      // Redireciona para o dashboard após sucesso
+      // (evita race condition de RLS imediatamente após inserção)
+      setTimeout(() => router.push("/dashboard"), 1500)
     } catch (error) {
       toast({
         title: "Erro ao entrar na pelada",
