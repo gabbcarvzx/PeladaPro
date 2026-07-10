@@ -23,7 +23,11 @@ function RegisterForm() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
 
-  const redirectTo = searchParams.get("redirect") || "/auth/login"
+  // Suporta 'next' (proxy) e 'redirect' (links convite) como fallback
+  const rawNext = searchParams.get("next") || searchParams.get("redirect") || ""
+  // Segurança: só permite redirect para paths internos (começando com / e NÃO com //)
+  const isValidRedirect = rawNext.startsWith("/") && !rawNext.startsWith("//")
+  const redirectTo = isValidRedirect ? rawNext : "/auth/login"
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault()

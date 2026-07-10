@@ -42,7 +42,7 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const protectedPrefixes = ["/dashboard", "/pelada/create", "/pelada/join", "/pelada/sorteio", "/pelada/ao-vivo", "/admin"]
+  const protectedPrefixes = ["/dashboard", "/pelada/create", "/pelada/entrar", "/pelada/join", "/pelada/sorteio", "/pelada/ao-vivo", "/admin"]
   // Protege qualquer rota /pelada/[id] ou /pelada/[id]/edit
   const isPeladaDynamic = /^\/pelada\/[^/]+(\/.*)?$/.test(request.nextUrl.pathname)
   const isProtectedPath = isPeladaDynamic || protectedPrefixes.some((path) =>
@@ -54,6 +54,11 @@ export async function proxy(request: NextRequest) {
   if (!user && isProtectedPath) {
     const url = request.nextUrl.clone()
     url.pathname = "/auth/login"
+
+    // Preserva a URL original para redirect pós-login
+    const originalPath = request.nextUrl.pathname + request.nextUrl.search
+    url.searchParams.set("next", originalPath)
+
     return NextResponse.redirect(url)
   }
 

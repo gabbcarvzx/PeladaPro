@@ -96,6 +96,7 @@ export default function EntrarPeladaPage({ params }: Props) {
     setJoining(true)
 
     try {
+      // RPC é idempotente (não gera erro se já participa) e bypassa RLS
       const success = await peladaService.addParticipante(pelada.id, user.id)
 
       if (success) {
@@ -106,14 +107,11 @@ export default function EntrarPeladaPage({ params }: Props) {
           description: "Agora você pode confirmar presença nos dias de jogo.",
           variant: "success",
         })
-        // Redireciona para a página principal da pelada após entrar
-        setTimeout(() => router.push(`/pelada/${pelada.id}`), 1000)
-      } else {
-        // Pelada lotada — mesmo assim adiciona como membro da pelada
-        // para que possa confirmar presença em jogos futuros
-        const success = await peladaService.adicionarMembro(pelada.id, user.id)
+      } else if (peladaFull) {
+        // Pelada lotada — adiciona como membro mesmo sem vaga
+        const memberSuccess = await peladaService.adicionarMembro(pelada.id, user.id)
 
-        if (success) {
+        if (memberSuccess) {
           setIsParticipant(true)
           setParticipantCount((prev) => prev + 1)
           toast({
@@ -121,16 +119,25 @@ export default function EntrarPeladaPage({ params }: Props) {
             description: "A pelada está lotada no momento, mas você já é membro. Confirme presença nos próximos jogos.",
             variant: "success",
           })
-          // Redireciona para a página principal da pelada após entrar
-          setTimeout(() => router.push(`/pelada/${pelada.id}`), 1000)
         } else {
           toast({
             title: "Erro ao entrar",
-            description: "Você já é participante ou ocorreu um erro.",
+            description: "Ocorreu um erro ao adicionar você à pelada.",
             variant: "destructive",
           })
+          return // não redireciona em caso de erro
         }
+      } else {
+        toast({
+          title: "Erro ao entrar",
+          description: "Não foi possível entrar na pelada. Tente novamente.",
+          variant: "destructive",
+        })
+        return // não redireciona em caso de erro
       }
+
+      // Redireciona para a página da pelada após sucesso
+      setTimeout(() => router.push(`/pelada/${pelada.id}`), 1500)
     } catch (error) {
       toast({
         title: "Erro ao entrar na pelada",

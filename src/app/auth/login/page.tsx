@@ -22,7 +22,11 @@ function LoginForm() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
 
-  const redirectTo = searchParams.get("redirect") || "/dashboard"
+  // Suporta 'next' (proxy) e 'redirect' (links convite) como fallback
+  const rawNext = searchParams.get("next") || searchParams.get("redirect") || ""
+  // Segurança: só permite redirect para paths internos (começando com / e NÃO com //)
+  const isValidRedirect = rawNext.startsWith("/") && !rawNext.startsWith("//")
+  const redirectTo = isValidRedirect ? rawNext : "/dashboard"
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()

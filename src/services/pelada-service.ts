@@ -137,16 +137,15 @@ export class PeladaService {
   }
 
   /**
-   * Busca pelada por link de convite
+   * Busca pelada por link de convite.
+   * Usa RPC security definer para bypassar RLS (usuários não-participantes podem ver pelo link).
    */
   async getByLink(link: string): Promise<Pelada | null> {
-    const { data } = await this.supabase
-      .from("peladas")
-      .select("*")
-      .eq("link_convite", link)
-      .single()
+    const { data } = await this.supabase.rpc("buscar_por_link_convite", {
+      p_link: link,
+    })
 
-    return data as Pelada | null
+    return (data as Pelada) || null
   }
 
   /**
@@ -271,35 +270,41 @@ export class PeladaService {
 
   /**
    * Adiciona participante a uma pelada (via link de convite).
+   * Usa RPC security definer para bypassar RLS.
+   * Idempotente: retorna true se já é participante.
    * Retorna false se a pelada estiver lotada.
    */
   async addParticipante(peladaId: string, userId: string): Promise<boolean> {
-    // Verificar se a pelada tem vagas
-    const pelada = await this.getById(peladaId)
-    if (!pelada) return false
-
-    const participantes = await this.getParticipantes(peladaId)
-    if (participantes.length >= pelada.limite_jogadores) return false
-
-    const { error } = await this.supabase.from("pelada_participantes").insert({
-      pelada_id: peladaId,
-      user_id: userId,
+    const { data, error } = await this.supabase.rpc("adicionar_participante", {
+      p_pelada_id: peladaId,
+      p_user_id: userId,
     })
 
-    return !error
+    if (error) {
+      console.error("[PARTICIPANTE] Erro ao adicionar:", error)
+      return false
+    }
+
+    return data === true
   }
 
   /**
    * Adiciona um membro à pelada independentemente do limite de vagas.
    * Usado no fluxo de convite quando a pelada está lotada.
+   * Usa RPC security definer, idempotente.
    */
   async adicionarMembro(peladaId: string, userId: string): Promise<boolean> {
-    const { error } = await this.supabase.from("pelada_participantes").insert({
-      pelada_id: peladaId,
-      user_id: userId,
+    const { data, error } = await this.supabase.rpc("adicionar_membro_sem_limite", {
+      p_pelada_id: peladaId,
+      p_user_id: userId,
     })
 
-    return !error
+    if (error) {
+      console.error("[PARTICIPANTE] Erro ao adicionar membro:", error)
+      return false
+    }
+
+    return data === true
   }
 
   /**
