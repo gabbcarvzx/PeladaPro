@@ -32,8 +32,9 @@ import {
   History,
   Sparkles,
   ArrowRight,
+  Clock,
 } from "lucide-react"
-import type { Pelada, PeladaOcorrencia, PeladaParticipante, ConfirmacaoDia, HistoricoSorteio, SorteioModo } from "@/types"
+import type { Pelada, PeladaOcorrencia, ConfirmacaoDia, HistoricoSorteio } from "@/types"
 
 interface Props {
   params: Promise<{ id: string }>
@@ -47,7 +48,6 @@ export default function SorteioPage({ params }: Props) {
   const [peladaId, setPeladaId] = useState<string>("")
   const [loading, setLoading] = useState(true)
   const [sorteando, setSorteando] = useState(false)
-  const [modo, setModo] = useState<SorteioModo>("aleatorio")
   const [selectedDate, setSelectedDate] = useState("")
   const [confirmados, setConfirmados] = useState<ConfirmacaoDia[]>([])
   const [timesGerados, setTimesGerados] = useState<HistoricoSorteio["times"]>([])
@@ -80,7 +80,6 @@ export default function SorteioPage({ params }: Props) {
       const h = await peladaService.getHistoricoSorteios(peladaId)
       setHistorico(h)
 
-      // Para peladas recorrentes, obtém a próxima ocorrência
       if (p.recorrente) {
         const oc = await peladaService.getOrCreateProximaOcorrencia(peladaId)
         if (oc) setOcorrenciaAtual(oc)
@@ -92,7 +91,8 @@ export default function SorteioPage({ params }: Props) {
   const loadConfirmados = async () => {
     if (!selectedDate) return
     const confs = await peladaService.getConfirmacoes(peladaId, selectedDate)
-    setConfirmados(confs.filter((c) => c.status === "confirmado"))
+    // Filtra apenas confirmados com hora_chegada (chegada física)
+    setConfirmados(confs.filter((c) => c.status === "confirmado" && c.hora_chegada))
   }
 
   useEffect(() => {
@@ -108,19 +108,23 @@ export default function SorteioPage({ params }: Props) {
     setShowResult(false)
 
     try {
-      // Anima por 2 segundos antes de mostrar o resultado
       await new Promise((resolve) => setTimeout(resolve, 2000))
 
-      const jogadores = confirmados.map((c) => ({
+      // Ordena por hora_chegada ASC (ordem de chegada)
+      const sorted = [...confirmados].sort((a, b) => {
+        if (!a.hora_chegada) return 1
+        if (!b.hora_chegada) return -1
+        return new Date(a.hora_chegada).getTime() - new Date(b.hora_chegada).getTime()
+      })
+
+      const jogadores = sorted.map((c) => ({
         user_id: c.user_id,
         nome: c.profile?.nome || "Jogador",
         avatar_url: c.profile?.avatar_url || null,
-        tipo: "diarista",
       }))
 
       const result = await peladaService.realizarSorteio(
         peladaId,
-        modo,
         jogadores,
         pelada.numero_times,
         pelada.jogadores_por_time,
@@ -147,13 +151,6 @@ export default function SorteioPage({ params }: Props) {
       setAnimating(false)
     }
   }
-
-  const modos = [
-    { value: "aleatorio" as SorteioModo, label: "Aleatório", desc: "Distribuição totalmente aleatória" },
-    { value: "ordem_chegada" as SorteioModo, label: "Ordem de Chegada", desc: "Mantém a ordem registrada pelo admin" },
-    { value: "priorizar_mensalistas" as SorteioModo, label: "Priorizar Mensalistas", desc: "Mensalistas são distribuídos primeiro" },
-    { value: "equilibrado" as SorteioModo, label: "Equilibrado", desc: "Distribuição uniforme entre os times" },
-  ]
 
   const dataAtual = new Date().toISOString().split("T")[0]
 
@@ -217,7 +214,7 @@ export default function SorteioPage({ params }: Props) {
               </h1>
               <p className="text-muted-foreground">
                 {isAdmin
-                  ? "Configure o modo de sorteio e clique para sortear os times"
+                  ? "Os times são gerados automaticamente pela ordem de chegada registrada."
                   : "Aguardando o admin realizar o sorteio"}
               </p>
             </div>
@@ -277,35 +274,24 @@ export default function SorteioPage({ params }: Props) {
                         />
                       </div>
 
-                      {/* Modo Selection */}
-                      <div className="space-y-2">
-                        <label className="text-sm text-muted-foreground">
+                      {/* Modo info (fixo) */}
+                      <div className="rounded-lg bg-muted/50 p-3">
+                        <p className="text-xs font-medium text-muted-foreground mb-1">
                           Modo de sorteio
-                        </label>
-                        <Select
-                          value={modo}
-                          onValueChange={(v) => setModo(v as SorteioModo)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {modos.map((m) => (
-                              <SelectItem key={m.value} value={m.value}>
-                                {m.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <p className="text-xs text-muted-foreground">
-                          {modos.find((m) => m.value === modo)?.desc}
+                        </p>
+                        <p className="text-sm flex items-center gap-2">
+                          <Clock className="h-4 w-4 text-primary" />
+                          Ordem de Chegada
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Baseado exclusivamente na hora de chegada registrada pelo admin.
                         </p>
                       </div>
 
                       {/* Confirmados Count */}
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <CheckCircle2 className="h-4 w-4 text-primary" />
-                        {confirmados.length} jogadores confirmados
+                        {confirmados.length} jogadores com chegada confirmada
                       </div>
 
                       <Button
@@ -346,8 +332,8 @@ export default function SorteioPage({ params }: Props) {
                               <span className="text-muted-foreground">
                                 {new Date(h.data_sorteio).toLocaleDateString("pt-BR")}
                               </span>
-                              <span className="text-xs font-medium capitalize">
-                                {h.modo.replace(/_/g, " ")}
+                              <span className="text-xs font-medium text-primary">
+                                Ordem de Chegada
                               </span>
                             </div>
                             <p className="text-xs text-muted-foreground mt-1">
@@ -403,7 +389,7 @@ export default function SorteioPage({ params }: Props) {
                           Times Sorteados! 🎉
                         </h2>
                         <p className="text-sm text-muted-foreground">
-                          Modo: {modos.find((m) => m.value === modo)?.label}
+                          Baseado na ordem de chegada registrada
                         </p>
                       </motion.div>
 
@@ -487,10 +473,12 @@ export default function SorteioPage({ params }: Props) {
                     <CardContent className="text-center">
                       <Shuffle className="h-16 w-16 text-muted-foreground/50 mx-auto mb-4" />
                       <p className="text-lg font-medium mb-2">
-                        Selecione uma data e configure o sorteio
+                        Selecione uma data para sortear
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        Escolha a data do jogo e o modo de sorteio ao lado para começar.
+                        Escolha a data do jogo ao lado para ver os jogadores confirmados.
+                        <br />
+                        O sorteio usa exclusivamente a ordem de chegada registrada pelo admin.
                       </p>
                     </CardContent>
                   </Card>
@@ -502,12 +490,20 @@ export default function SorteioPage({ params }: Props) {
                     <CardContent className="text-center">
                       <Users className="h-16 w-16 text-muted-foreground/50 mx-auto mb-4" />
                       <p className="text-lg font-medium mb-2">
-                        Nenhum jogador confirmado
+                        Nenhum jogador com chegada confirmada
                       </p>
                       <p className="text-sm text-muted-foreground">
                         Para a data selecionada ({new Date(selectedDate).toLocaleDateString("pt-BR")}), 
-                        nenhum jogador confirmou presença ainda.
+                        nenhum jogador teve a chegada confirmada pelo admin ainda.
+                        <br />
+                        Confirme as chegadas na página da pelada primeiro.
                       </p>
+                      <Link href={`/pelada/${peladaId}`} className="mt-4 inline-block">
+                        <Button variant="outline">
+                          <ArrowLeft className="mr-2 h-4 w-4" />
+                          Voltar para a pelada
+                        </Button>
+                      </Link>
                     </CardContent>
                   </Card>
                 )}

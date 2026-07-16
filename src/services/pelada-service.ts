@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
-import type { Pelada, PeladaOcorrencia, PeladaParticipante, ConfirmacaoDia, ListaEspera, HistoricoSorteio, SorteioModo } from "@/types"
+import type { Pelada, PeladaOcorrencia, PeladaParticipante, ConfirmacaoDia, ListaEspera, HistoricoSorteio } from "@/types"
 import { PermissionService } from "./permission-service"
 
 export class PeladaService {
@@ -15,7 +15,6 @@ export class PeladaService {
   async create(data: {
     nome: string
     descricao?: string
-    limite_jogadores: number
     limite_por_ocorrencia?: number
     numero_times: number
     jogadores_por_time: number
@@ -30,24 +29,17 @@ export class PeladaService {
     const permService = new PermissionService(this.supabase)
     await permService.assertCanCreatePelada(data.admin_id)
 
-    // Gera um link de convite único
-    const { data: linkData } = await this.supabase.rpc("gerar_link_convite")
-    const link_convite = (linkData as string) || Math.random().toString(36).slice(2, 10)
-
     const { data: pelada } = await this.supabase
       .from("peladas")
       .insert({
         nome: data.nome,
         descricao: data.descricao,
-        limite_jogadores: data.limite_jogadores,
         limite_por_ocorrencia: data.limite_por_ocorrencia || 25,
         numero_times: data.numero_times,
         jogadores_por_time: data.jogadores_por_time,
         local: data.local,
         data: data.data,
         admin_id: data.admin_id,
-        link_convite,
-        invite_code: link_convite,
         recorrente: data.recorrente || false,
         dia_semana: data.dia_semana || null,
         horario: data.horario || null,
@@ -72,7 +64,7 @@ export class PeladaService {
    * Usa RPC security definer para peladas como participante (bypassa RLS).
    */
   async getUserPeladas(userId: string): Promise<Pelada[]> {
-    // Busca peladas onde o user é admin (query direta já funciona pelo RLS: admin vê própria pelada)
+    // Busca peladas onde o user é admin
     const { data: adminPeladas } = await this.supabase
       .from("peladas")
       .select("*")
@@ -92,7 +84,6 @@ export class PeladaService {
 
     let participantPeladas: Pelada[] = []
     if (participantIds.length > 0) {
-      // Usa RPC security definer para bypassar RLS
       const { data } = await this.supabase.rpc("buscar_por_ids", {
         p_pelada_ids: participantIds,
       })
@@ -100,7 +91,6 @@ export class PeladaService {
       participantPeladas = (data as Pelada[]) || []
     }
 
-    // Mescla os resultados, admin primeiro
     return [...(adminPeladas as Pelada[]), ...participantPeladas]
   }
 
@@ -129,7 +119,6 @@ export class PeladaService {
   /**
    * Busca pelada por ID.
    * Usa RPC security definer para bypassar RLS.
-   * Garante que participantes recém-adicionados consigam ler a pelada.
    */
   async getById(peladaId: string): Promise<Pelada | null> {
     const { data } = await this.supabase.rpc("buscar_por_id", {
@@ -140,33 +129,9 @@ export class PeladaService {
   }
 
   /**
-   * Busca pelada por link de convite.
-   * Usa RPC security definer para bypassar RLS (usuários não-participantes podem ver pelo link).
-   */
-  async getByLink(link: string): Promise<Pelada | null> {
-    const { data } = await this.supabase.rpc("buscar_por_link_convite", {
-      p_link: link,
-    })
-
-    return (data as Pelada) || null
-  }
-
-  /**
-   * Busca pelada por invite_code público (usa security definer function para bypassar RLS)
-   */
-  async getByInviteCode(inviteCode: string): Promise<Pelada | null> {
-    const { data } = await this.supabase.rpc("buscar_por_invite_code", {
-      p_invite_code: inviteCode,
-    })
-
-    return (data as Pelada) || null
-  }
-
-  /**
    * Atualiza uma pelada
    */
   async update(peladaId: string, updates: Partial<Pelada>): Promise<Pelada | null> {
-    // Proteção: verifica se o admin tem permissão
     const permService = new PermissionService(this.supabase)
     const { data: pelada } = await this.supabase
       .from("peladas")
@@ -211,7 +176,6 @@ export class PeladaService {
    * sem verificar limite de jogadores.
    */
   async adminPromoverDaFila(peladaId: string, userId: string, dataJogo: string): Promise<boolean> {
-    // Proteção: verifica se o admin tem permissão
     const permService = new PermissionService(this.supabase)
     const { data: pelada } = await this.supabase
       .from("peladas")
@@ -222,6 +186,7 @@ export class PeladaService {
     if (!pelada) return false
     const adminId = (pelada as any).admin_id
     await permService.assertCanManagePelada(adminId, peladaId)
+
     // Remove da lista de espera
     const { error: deleteError } = await this.supabase
       .from("lista_espera")
@@ -232,12 +197,23 @@ export class PeladaService {
 
     if (deleteError) return false
 
-    // Atualiza confirmação para confirmado
+    // Atualiza confirmação para confirmado com hora_chegada
     await this.supabase.from("confirmacoes_dia").upsert({
       pelada_id: peladaId,
       user_id: userId,
       data_jogo: dataJogo,
       status: "confirmado",
+      hora_chegada: new Date().toISOString(),
+      ordem_chegada: (
+        await this.supabase
+          .from("confirmacoes_dia")
+          .select("ordem_chegada")
+          .eq("pelada_id", peladaId)
+          .eq("data_jogo", dataJogo)
+          .order("ordem_chegada", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      )?.data?.ordem_chegada || 0 + 1,
     }, {
       onConflict: "pelada_id, user_id, data_jogo",
     })
@@ -272,10 +248,9 @@ export class PeladaService {
   }
 
   /**
-   * Adiciona participante a uma pelada (via link de convite).
+   * Adiciona participante a uma pelada (apenas admin).
    * Usa RPC security definer para bypassar RLS.
    * Idempotente: retorna true se já é participante.
-   * Retorna false se a pelada estiver lotada.
    */
   async addParticipante(peladaId: string, userId: string): Promise<boolean> {
     const { data, error } = await this.supabase.rpc("adicionar_participante", {
@@ -292,29 +267,9 @@ export class PeladaService {
   }
 
   /**
-   * Adiciona um membro à pelada independentemente do limite de vagas.
-   * Usado no fluxo de convite quando a pelada está lotada.
-   * Usa RPC security definer, idempotente.
-   */
-  async adicionarMembro(peladaId: string, userId: string): Promise<boolean> {
-    const { data, error } = await this.supabase.rpc("adicionar_membro_sem_limite", {
-      p_pelada_id: peladaId,
-      p_user_id: userId,
-    })
-
-    if (error) {
-      console.error("[PARTICIPANTE] Erro ao adicionar membro:", error)
-      return false
-    }
-
-    return data === true
-  }
-
-  /**
    * Remove participante de uma pelada
    */
   async removeParticipante(peladaId: string, userId: string): Promise<void> {
-    // Proteção: verifica se o admin tem permissão
     const permService = new PermissionService(this.supabase)
     const { data: pelada } = await this.supabase
       .from("peladas")
@@ -333,10 +288,9 @@ export class PeladaService {
   }
 
   /**
-   * Altera o tipo do jogador (mensalista/diarista)
+   * Altera o tipo do jogador (apenas informativo, não afeta prioridade)
    */
-  async alterarTipoJogador(peladaId: string, userId: string, tipo: "mensalista" | "diarista"): Promise<void> {
-    // Proteção: verifica se o admin tem permissão
+  async alterarTipoJogador(peladaId: string, userId: string, tipo: string): Promise<void> {
     const permService = new PermissionService(this.supabase)
     const { data: pelada } = await this.supabase
       .from("peladas")
@@ -359,59 +313,71 @@ export class PeladaService {
   // ==========================================
 
   /**
-   * Verifica se o usuário é participante da pelada
+   * Jogador (ou admin) marca intenção de ir para a pelada.
+   * Apenas status = 'pendente' — não define prioridade.
    */
-  private async isParticipante(peladaId: string, userId: string): Promise<boolean> {
-    const { data } = await this.supabase
-      .from("pelada_participantes")
-      .select("id")
-      .eq("pelada_id", peladaId)
-      .eq("user_id", userId)
-      .single()
-
-    return !!data
-  }
-
-  /**
-   * Confirma presença para um dia específico.
-   * Usa RPC transacional (com lock) para evitar race condition.
-   * Regras:
-   *   - Mensalistas sempre entram (prioridade)
-   *   - Diaristas entram se houver vaga, senão vão para fila de espera
-   *   - Participantes são ilimitados na pelada, apenas o limite por ocorrência conta
-   */
-  async confirmarPresenca(peladaId: string, userId: string, dataJogo: string, ocorrenciaId?: string): Promise<{ status: "confirmado" | "fila"; posicao?: number }> {
-    const { data, error } = await this.supabase.rpc("confirmar_presenca_ocorrencia", {
+  async confirmarIntencao(peladaId: string, userId: string, dataJogo: string, ocorrenciaId?: string): Promise<void> {
+    const { data, error } = await this.supabase.rpc("confirmar_intencao", {
       p_pelada_id: peladaId,
       p_user_id: userId,
       p_data_jogo: dataJogo,
       p_ocorrencia_id: ocorrenciaId || null,
     })
 
-    if (error || !data) {
-      console.error("[CONFIRMAR] Erro no RPC:", error)
-      const errMsg = (data as any)?.error || error?.message || "Erro ao confirmar presença"
+    if (error) {
+      console.error("[INTENCAO] Erro no RPC:", error)
+      const errMsg = (data as any)?.error || error?.message || "Erro ao marcar intenção"
       throw new Error(errMsg)
     }
 
-    const result = data as { status: string; posicao?: number; error?: string }
+    const result = data as { error?: string }
     if (result.error) {
       throw new Error(result.error)
-    }
-
-    return {
-      status: result.status as "confirmado" | "fila",
-      posicao: result.posicao,
     }
   }
 
   /**
-   * Recusa presença para um dia específico.
-   * Usa RPC transacional (com lock) que remove a confirmação
-   * e promove automaticamente o primeiro da fila de espera.
+   * Admin confirma chegada do jogador (define prioridade real).
+   * Usa RPC transacional com lock.
+   * Se limite atingido, insere automaticamente na fila de espera.
    */
-  async recusarPresenca(peladaId: string, userId: string, dataJogo: string, ocorrenciaId?: string): Promise<{ promovido: boolean; nomePromovido?: string }> {
-    const { data, error } = await this.supabase.rpc("cancelar_presenca_ocorrencia", {
+  async confirmarChegada(
+    peladaId: string,
+    userId: string,
+    dataJogo: string,
+    ocorrenciaId?: string,
+  ): Promise<{ status: "confirmado" | "fila"; ordem_chegada?: number; confirmados?: number; limite?: number }> {
+    const { data, error } = await this.supabase.rpc("confirmar_chegada", {
+      p_pelada_id: peladaId,
+      p_user_id: userId,
+      p_data_jogo: dataJogo,
+      p_ocorrencia_id: ocorrenciaId || null,
+    })
+
+    if (error) {
+      console.error("[CHEGADA] Erro no RPC:", error)
+      throw new Error(error.message)
+    }
+
+    const result = data as { status: string; ordem_chegada?: number; confirmados?: number; limite?: number; error?: string }
+    if (result.error) {
+      throw new Error(result.error)
+    }
+
+    return result as { status: "confirmado" | "fila"; ordem_chegada?: number; confirmados?: number; limite?: number }
+  }
+
+  /**
+   * Recusa presença de um jogador.
+   * Se estava confirmado, promove automaticamente o primeiro da fila de espera.
+   */
+  async recusarPresenca(
+    peladaId: string,
+    userId: string,
+    dataJogo: string,
+    ocorrenciaId?: string,
+  ): Promise<{ promovido: boolean; nomePromovido?: string }> {
+    const { data, error } = await this.supabase.rpc("recusar_presenca", {
       p_pelada_id: peladaId,
       p_user_id: userId,
       p_data_jogo: dataJogo,
@@ -435,31 +401,8 @@ export class PeladaService {
   }
 
   /**
-   * Admin confirma chegada do jogador
-   */
-  async confirmarChegada(peladaId: string, userId: string, dataJogo: string, ordem: number): Promise<void> {
-    // Proteção: verifica se o admin tem permissão
-    const permService = new PermissionService(this.supabase)
-    const { data: pelada } = await this.supabase
-      .from("peladas")
-      .select("admin_id")
-      .eq("id", peladaId)
-      .single()
-
-    if (!pelada) throw new Error("Pelada não encontrada")
-    const adminId = (pelada as any).admin_id
-    await permService.assertCanManagePelada(adminId, peladaId)
-
-    await this.supabase
-      .from("confirmacoes_dia")
-      .update({ status: "confirmado", ordem_chegada: ordem })
-      .eq("pelada_id", peladaId)
-      .eq("user_id", userId)
-      .eq("data_jogo", dataJogo)
-  }
-
-  /**
-   * Busca confirmações de uma pelada em uma data
+   * Busca confirmações de uma pelada em uma data.
+   * Ordenadas por ordem_chegada (primeiro confirmado = primeira chegada).
    */
   async getConfirmacoes(peladaId: string, dataJogo: string): Promise<ConfirmacaoDia[]> {
     const { data } = await this.supabase
@@ -539,17 +482,16 @@ export class PeladaService {
   // ==========================================
 
   /**
-   * Realiza sorteio dos times
+   * Realiza sorteio dos times usando exclusivamente ordem de chegada.
+   * Apenas admin pode executar.
    */
   async realizarSorteio(
     peladaId: string,
-    modo: SorteioModo,
-    participantes: { user_id: string; nome: string; avatar_url: string | null; tipo: string }[],
+    participantes: { user_id: string; nome: string; avatar_url: string | null }[],
     numeroTimes: number,
     jogadoresPorTime: number,
     ocorrenciaId?: string,
   ): Promise<HistoricoSorteio | null> {
-    // Proteção: verifica se o admin tem permissão
     const permService = new PermissionService(this.supabase)
     const { data: pelada } = await this.supabase
       .from("peladas")
@@ -561,13 +503,13 @@ export class PeladaService {
     const adminId = (pelada as any).admin_id
     await permService.assertCanManagePelada(adminId, peladaId)
 
-    const times = this.gerarTimes(participantes, modo, numeroTimes, jogadoresPorTime)
+    const times = this.gerarTimes(participantes, numeroTimes, jogadoresPorTime)
 
     const { data } = await this.supabase
       .from("historico_sorteios")
       .insert({
         pelada_id: peladaId,
-        modo,
+        modo: "ordem_chegada",
         times: JSON.stringify(times),
         ...(ocorrenciaId ? { pelada_ocorrencia_id: ocorrenciaId } : {}),
       })
@@ -578,49 +520,15 @@ export class PeladaService {
   }
 
   /**
-   * Algoritmo de geração de times
+   * Algoritmo de geração de times baseado em ordem de chegada.
+   * Os participantes já devem vir ordenados por hora_chegada ASC.
+   * Distribuição serpentina para balancear os times.
    */
   private gerarTimes(
-    participantes: { user_id: string; nome: string; avatar_url: string | null; tipo: string }[],
-    modo: SorteioModo,
+    participantes: { user_id: string; nome: string; avatar_url: string | null }[],
     numeroTimes: number,
     jogadoresPorTime: number,
   ): { nome: string; jogadores: { user_id: string; nome: string; avatar_url: string | null }[] }[] {
-    let jogadoresOrdenados = [...participantes]
-
-    switch (modo) {
-      case "aleatorio":
-        // Fisher-Yates shuffle
-        for (let i = jogadoresOrdenados.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [jogadoresOrdenados[i], jogadoresOrdenados[j]] = [jogadoresOrdenados[j], jogadoresOrdenados[i]]
-        }
-        break
-
-      case "ordem_chegada":
-        // Mantém a ordem (já deve vir ordenada da query)
-        break
-
-      case "priorizar_mensalistas":
-        // Mensalistas primeiro, depois diaristas
-        jogadoresOrdenados.sort((a, b) => {
-          if (a.tipo === "mensalista" && b.tipo !== "mensalista") return -1
-          if (a.tipo !== "mensalista" && b.tipo === "mensalista") return 1
-          return Math.random() - 0.5
-        })
-        break
-
-      case "equilibrado":
-        // Distribuição serpentina: o melhor time pega o melhor jogador,
-        // depois o último, etc. Como não temos rating, usamos aleatório
-        // com distribuição uniforme
-        for (let i = jogadoresOrdenados.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [jogadoresOrdenados[i], jogadoresOrdenados[j]] = [jogadoresOrdenados[j], jogadoresOrdenados[i]]
-        }
-        break
-    }
-
     const nomesTimes = [
       "Time Azul", "Time Vermelho", "Time Verde", "Time Amarelo",
       "Time Roxo", "Time Laranja", "Time Rosa", "Time Cinza",
@@ -635,8 +543,8 @@ export class PeladaService {
       })
     }
 
-    // Distribuição serpentina
-    jogadoresOrdenados.forEach((jogador, index) => {
+    // Distribuição serpentina baseada na ordem de chegada
+    participantes.forEach((jogador, index) => {
       const timeIndex = index % numeroTimes
       if (times[timeIndex].jogadores.length < jogadoresPorTime) {
         times[timeIndex].jogadores.push({
@@ -675,7 +583,6 @@ export class PeladaService {
       p_pelada_id: peladaId,
     })
 
-    // A função v2 retorna { ocorrencia_id, ocorrencia_data } via OUT params
     const result = data as unknown as { ocorrencia_id: string; ocorrencia_data: string } | null
     if (!result?.ocorrencia_id) return null
 

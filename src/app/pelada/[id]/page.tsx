@@ -10,14 +10,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Avatar, AvatarImage } from "@/components/ui/avatar"
 import { AvatarPlaceholder } from "@/components/ui/avatar-placeholder"
 import { EmptyState } from "@/components/ui/empty-state"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
@@ -35,24 +30,22 @@ import {
   MapPin,
   Users,
   Shuffle,
-  Copy,
   Trash2,
-  Crown,
   CheckCircle2,
   XCircle,
-
   ArrowLeft,
   UserMinus,
   Settings2,
   ChevronDown,
   ChevronUp,
-  LogOut,
   ListOrdered,
   UserPlus,
   ArrowUp,
-  Zap,
   Swords,
   Repeat,
+  Plus,
+  Pencil,
+  Zap,
 } from "lucide-react"
 import type { Pelada, PeladaOcorrencia, PeladaParticipante, ConfirmacaoDia, ListaEspera } from "@/types"
 import { BadgeStatus } from "@/components/ui/badge-status"
@@ -78,6 +71,19 @@ export default function PeladaDetailPage({ params }: Props) {
   const [minhaPosicaoFila, setMinhaPosicaoFila] = useState(0)
   const [promovidoInfo, setPromovidoInfo] = useState<{ nome: string } | null>(null)
   const [ocorrenciaAtual, setOcorrenciaAtual] = useState<PeladaOcorrencia | null>(null)
+
+  // Modais de gerenciamento de jogadores
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [showRemoveModal, setShowRemoveModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editTarget, setEditTarget] = useState<PeladaParticipante | null>(null)
+  const [removeTarget, setRemoveTarget] = useState<PeladaParticipante | null>(null)
+  const [addNome, setAddNome] = useState("")
+  const [addTipo, setAddTipo] = useState("diarista")
+  const [editNome, setEditNome] = useState("")
+  const [savingAdd, setSavingAdd] = useState(false)
+  const [savingEdit, setSavingEdit] = useState(false)
+  const [removing, setRemoving] = useState(false)
 
   const isAdmin = user?.id === pelada?.admin_id
 
@@ -124,28 +130,105 @@ export default function PeladaDetailPage({ params }: Props) {
     setLoading(false)
   }
 
-  const handleCopyLink = () => {
-    if (!pelada) return
-    const link = `${window.location.origin}/pelada/entrar/${pelada.invite_code}`
-    navigator.clipboard.writeText(link)
-    toast({
-      title: "Link copiado!",
-      description: "Compartilhe com os jogadores.",
-      variant: "success",
-    })
+  const handleOpenRemoveModal = (userId: string) => {
+    const target = participantes.find((p) => p.user_id === userId)
+    if (target) {
+      setRemoveTarget(target)
+      setShowRemoveModal(true)
+    }
   }
 
-  const handleRemoveParticipant = async (userId: string) => {
-    if (!confirm("Remover este jogador da pelada?")) return
-    await peladaService.removeParticipante(peladaId, userId)
-    setParticipantes((prev) => prev.filter((p) => p.user_id !== userId))
-    toast({ title: "Jogador removido" })
+  const handleConfirmRemove = async () => {
+    if (!removeTarget) return
+    setRemoving(true)
+    try {
+      const res = await fetch("/api/admin/jogadores", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ peladaId, userId: removeTarget.user_id }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Erro ao remover")
+      setParticipantes((prev) => prev.filter((p) => p.user_id !== removeTarget.user_id))
+      toast({ title: "Jogador removido", variant: "success" })
+      setShowRemoveModal(false)
+      setRemoveTarget(null)
+    } catch (err) {
+      toast({ title: "Erro ao remover", description: err instanceof Error ? err.message : "Erro", variant: "destructive" })
+    } finally {
+      setRemoving(false)
+    }
   }
 
-  const handleAlterarTipo = async (userId: string, tipo: "mensalista" | "diarista") => {
+  const handleOpenEditModal = (participante: PeladaParticipante) => {
+    setEditTarget(participante)
+    setEditNome(participante.profile?.nome || "")
+    setShowEditModal(true)
+  }
+
+  const handleConfirmEdit = async () => {
+    if (!editTarget || !editNome.trim()) return
+    setSavingEdit(true)
+    try {
+      const res = await fetch("/api/admin/jogadores", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ peladaId, userId: editTarget.user_id, nome: editNome.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Erro ao editar")
+      setParticipantes((prev) =>
+        prev.map((p) =>
+          p.user_id === editTarget.user_id
+            ? { ...p, profile: { ...p.profile, nome: editNome.trim() } as any }
+            : p,
+        ),
+      )
+      toast({ title: "Nome atualizado!", variant: "success" })
+      setShowEditModal(false)
+      setEditTarget(null)
+    } catch (err) {
+      toast({ title: "Erro ao editar", description: err instanceof Error ? err.message : "Erro", variant: "destructive" })
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
+  const handleAddJogador = async () => {
+    if (!addNome.trim()) return
+    setSavingAdd(true)
+    try {
+      const res = await fetch("/api/admin/jogadores", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          peladaId,
+          nome: addNome.trim(),
+          tipo: addTipo,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Erro ao adicionar")
+      // Recarrega participantes
+      const parts = await peladaService.getParticipantes(peladaId)
+      setParticipantes(parts)
+      toast({ title: "Jogador adicionado!", description: `${addNome.trim()} entrou na pelada.`, variant: "success" })
+      setShowAddModal(false)
+      setAddNome("")
+      setAddTipo("diarista")
+    } catch (err) {
+      toast({ title: "Erro", description: err instanceof Error ? err.message : "Erro ao adicionar", variant: "destructive" })
+    } finally {
+      setSavingAdd(false)
+    }
+  }
+
+  const handleAlterarTipo = async (userId: string, tipo: string) => {
     await peladaService.alterarTipoJogador(peladaId, userId, tipo)
     setParticipantes((prev) =>
-      prev.map((p) => (p.user_id === userId ? { ...p, tipo } : p)),
+      prev.map((p) =>
+        p.user_id === userId ? { ...p, tipo: tipo as "mensalista" | "diarista" } : p,
+      ),
     )
     toast({ title: "Tipo alterado", variant: "success" })
   }
@@ -154,13 +237,6 @@ export default function PeladaDetailPage({ params }: Props) {
     if (!confirm("Tem certeza? Esta ação não pode ser desfeita.")) return
     await peladaService.delete(peladaId)
     toast({ title: "Pelada excluída" })
-    router.push("/dashboard")
-  }
-
-  const handleSair = async () => {
-    if (!user) return
-    await peladaService.removeParticipante(peladaId, user.id)
-    toast({ title: "Você saiu da pelada" })
     router.push("/dashboard")
   }
 
@@ -182,17 +258,8 @@ export default function PeladaDetailPage({ params }: Props) {
 
   const handleConfirmarPresenca = async () => {
     if (!user || !confirmingDate) return
-    const result = await peladaService.confirmarPresenca(peladaId, user.id, confirmingDate, ocorrenciaAtual?.id)
-
-    if (result.status === "fila") {
-      toast({
-        title: "Pelada lotada — você foi para a fila de espera!",
-        description: `Sua posição: ${result.posicao}º`, 
-        variant: "default",
-      })
-    } else {
-      toast({ title: "Presença confirmada!", variant: "success" })
-    }
+    await peladaService.confirmarIntencao(peladaId, user.id, confirmingDate, ocorrenciaAtual?.id)
+    toast({ title: "Intenção registrada!", description: "Você marcou que vai jogar. O admin confirmará sua chegada no local.", variant: "success" })
     await loadConfirmacoes()
     await loadFilaEspera()
   }
@@ -215,11 +282,20 @@ export default function PeladaDetailPage({ params }: Props) {
     await loadFilaEspera()
   }
 
-  const handleConfirmarChegada = async (userId: string, ordem: number) => {
+  const handleConfirmarChegada = async (userId: string) => {
     if (!confirmingDate) return
-    await peladaService.confirmarChegada(peladaId, userId, confirmingDate, ordem)
-    toast({ title: `Chegada confirmada! Ordem: ${ordem}º`, variant: "success" })
+    const result = await peladaService.confirmarChegada(peladaId, userId, confirmingDate, ocorrenciaAtual?.id)
+    if (result.status === "fila") {
+      toast({
+        title: "Pelada lotada!",
+        description: "Jogador foi para a fila de espera (limite de 25 atingido).",
+        variant: "default",
+      })
+    } else {
+      toast({ title: `Chegada confirmada! Ordem: ${result.ordem_chegada}º`, variant: "success" })
+    }
     await loadConfirmacoes()
+    await loadFilaEspera()
   }
 
   const handlePromoverDaFila = async (userId: string) => {
@@ -254,14 +330,6 @@ export default function PeladaDetailPage({ params }: Props) {
   const pendentes = participantes.filter(
     (p) => !confirmacoes.find((c) => c.user_id === p.user_id),
   ).length
-
-  const getProximaOrdem = () => {
-    const maxOrdem = confirmacoes.reduce(
-      (max, c) => Math.max(max, c.ordem_chegada || 0),
-      0,
-    )
-    return maxOrdem + 1
-  }
 
   if (authLoading || loading) {
     return (
@@ -309,11 +377,6 @@ export default function PeladaDetailPage({ params }: Props) {
                   <Trash2 className="h-5 w-5 text-destructive" />
                 </Button>
               )}
-              {!isAdmin && user && (
-                <Button variant="ghost" size="sm" onClick={handleSair}>
-                  <LogOut className="h-4 w-4 mr-1" /> Sair
-                </Button>
-              )}
             </div>
           </div>
         </div>
@@ -355,15 +418,6 @@ export default function PeladaDetailPage({ params }: Props) {
                       </p>
                     )}
                   </div>
-                  <Button
-                    onClick={handleCopyLink}
-                    variant="secondary"
-                    size="sm"
-                    className="shrink-0"
-                  >
-                    <Copy className="mr-2 h-4 w-4" />
-                    Copiar link
-                  </Button>
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6">
@@ -412,23 +466,35 @@ export default function PeladaDetailPage({ params }: Props) {
             <div className="lg:col-span-2">
               <FadeIn>
                 <div className="rounded-xl bg-[#1a1a1a] border border-[#2a2a2a] overflow-hidden">
-                  <div
-                    className="flex items-center justify-between p-6 pb-4 cursor-pointer select-none"
-                    onClick={() => setShowParticipants(!showParticipants)}
-                  >
-                    <div>
-                      <h3 className="text-base font-semibold text-[#fafafa] flex items-center gap-2">
-                        <Users className="h-5 w-5 text-[#00e676]" />
-                        Participantes
-                      </h3>
-                      <p className="text-sm text-[#6b7280]">
-                        {participantes.length} jogadores
-                      </p>
+                  <div className="flex items-center justify-between p-6 pb-4">
+                    <div
+                      className="flex items-center gap-3 cursor-pointer select-none"
+                      onClick={() => setShowParticipants(!showParticipants)}
+                    >
+                      <div>
+                        <h3 className="text-base font-semibold text-[#fafafa] flex items-center gap-2">
+                          <Users className="h-5 w-5 text-[#00e676]" />
+                          Participantes
+                        </h3>
+                        <p className="text-sm text-[#6b7280]">
+                          {participantes.length} jogadores
+                        </p>
+                      </div>
+                      {showParticipants ? (
+                        <ChevronUp className="h-5 w-5 text-[#6b7280]" />
+                      ) : (
+                        <ChevronDown className="h-5 w-5 text-[#6b7280]" />
+                      )}
                     </div>
-                    {showParticipants ? (
-                      <ChevronUp className="h-5 w-5 text-[#6b7280]" />
-                    ) : (
-                      <ChevronDown className="h-5 w-5 text-[#6b7280]" />
+                    {isAdmin && (
+                      <Button
+                        variant="glow"
+                        size="sm"
+                        onClick={() => setShowAddModal(true)}
+                      >
+                        <Plus className="mr-1 h-4 w-4" />
+                        Adicionar
+                      </Button>
                     )}
                   </div>
 
@@ -468,16 +534,27 @@ export default function PeladaDetailPage({ params }: Props) {
                                 {isAdmin &&
                                   participante.user_id !== pelada.admin_id && (
                                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8"
+                                        onClick={() =>
+                                          handleOpenEditModal(participante)
+                                        }
+                                        title="Editar nome"
+                                      >
+                                        <Pencil className="h-3.5 w-3.5 text-[#6b7280] hover:text-[#00e676] transition-colors" />
+                                      </Button>
                                       <Select
                                         value={participante.tipo}
                                         onValueChange={(v) =>
                                           handleAlterarTipo(
                                             participante.user_id,
-                                            v as "mensalista" | "diarista",
+                                            v,
                                           )
                                         }
                                       >
-                                        <SelectTrigger className="h-8 w-28 text-xs bg-[#1a1a1a] border-[#2a2a2a]">
+                                        <SelectTrigger className="h-8 w-20 text-xs bg-[#1a1a1a] border-[#2a2a2a]">
                                           <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -494,7 +571,7 @@ export default function PeladaDetailPage({ params }: Props) {
                                         size="icon"
                                         className="h-8 w-8"
                                         onClick={() =>
-                                          handleRemoveParticipant(
+                                          handleOpenRemoveModal(
                                             participante.user_id,
                                           )
                                         }
@@ -511,7 +588,7 @@ export default function PeladaDetailPage({ params }: Props) {
                             <EmptyState
                               icon={Users}
                               title="Nenhum participante ainda"
-                              description="Compartilhe o link de convite para adicionar jogadores."
+                              description="Adicione jogadores manualmente no painel de administração."
                             />
                           )}
                         </StaggerContainer>
@@ -599,15 +676,20 @@ export default function PeladaDetailPage({ params }: Props) {
                     )}
 
                     {/* Admin Check-in Panel */}
-                    {isAdmin && showConfirmacoes && confirmadosCount > 0 && (
+                    {isAdmin && showConfirmacoes && (
                       <div className="border-t border-[#2a2a2a] pt-4 mt-2">
                         <p className="text-xs font-medium text-[#6b7280] uppercase tracking-wider mb-3">
-                          Ordem de Chegada
+                          Confirmar Chegada (define prioridade)
                         </p>
                         <div className="space-y-2">
                           {confirmacoes
-                            .filter((c) => c.status === "confirmado")
-                            .sort((a, b) => (a.ordem_chegada || 999) - (b.ordem_chegada || 999))
+                            .filter((c) => c.status === "pendente" || c.status === "confirmado")
+                            .sort((a, b) => {
+                              // Confirmados com hora_chegada primeiro, depois pendentes
+                              if (a.hora_chegada && !b.hora_chegada) return -1
+                              if (!a.hora_chegada && b.hora_chegada) return 1
+                              return (a.ordem_chegada || 999) - (b.ordem_chegada || 999)
+                            })
                             .map((conf) => (
                               <div
                                 key={conf.id}
@@ -622,8 +704,13 @@ export default function PeladaDetailPage({ params }: Props) {
                                     <AvatarPlaceholder name={conf.profile?.nome} size="sm" />
                                   )}
                                   <span className="text-xs text-[#fafafa]">{conf.profile?.nome}</span>
+                                  {conf.hora_chegada && (
+                                    <span className="text-[10px] text-[#00e676]/60 ml-1">
+                                      {new Date(conf.hora_chegada).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                                    </span>
+                                  )}
                                 </div>
-                                {conf.ordem_chegada ? (
+                                {conf.hora_chegada ? (
                                   <span className="text-xs font-medium text-[#00e676]">
                                     {conf.ordem_chegada}º
                                   </span>
@@ -633,13 +720,10 @@ export default function PeladaDetailPage({ params }: Props) {
                                     size="sm"
                                     className="h-6 text-xs"
                                     onClick={() =>
-                                      handleConfirmarChegada(
-                                        conf.user_id,
-                                        getProximaOrdem(),
-                                      )
+                                      handleConfirmarChegada(conf.user_id)
                                     }
                                   >
-                                    Confirmar
+                                    Chegou
                                   </Button>
                                 )}
                               </div>
@@ -796,8 +880,10 @@ export default function PeladaDetailPage({ params }: Props) {
                                       <span className="text-xs font-medium text-[#fafafa]">
                                         {item.profile?.nome}
                                       </span>
-                                      {item.prioridade === "mensalista" && (
-                                        <BadgeStatus type="mensalista" />
+                                      {item.posicao === 1 && (
+                                        <span className="text-[10px] text-[#ffab00]">
+                                          Próximo
+                                        </span>
                                       )}
                                     </div>
 
@@ -878,6 +964,31 @@ export default function PeladaDetailPage({ params }: Props) {
                 </div>
               </FadeIn>
 
+              {/* Modo Dia de Jogo */}
+              {isAdmin && (
+                <FadeIn delay={0.22}>
+                  <div className="rounded-xl bg-gradient-to-br from-[#00e676]/5 to-[#00e676]/10 border border-[#00e676]/20">
+                    <div className="p-6 pb-4">
+                      <h3 className="text-base font-semibold text-[#fafafa] flex items-center gap-2">
+                        <Zap className="h-5 w-5 text-[#00e676]" />
+                        Modo Dia de Jogo
+                      </h3>
+                    </div>
+                    <div className="px-6 pb-6 space-y-4">
+                      <p className="text-sm text-[#6b7280]">
+                        Tela otimizada para uso no local da pelada. Confirme chegadas com um toque, veja ordem e fila em tempo real.
+                      </p>
+                      <Link href={`/pelada/${pelada.id}/dia-de-jogo`}>
+                        <Button variant="glow" className="w-full h-12 text-base font-bold">
+                          <Zap className="mr-2 h-5 w-5" />
+                          Abrir Modo Dia de Jogo
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
+                </FadeIn>
+              )}
+
               {/* Ao Vivo */}
               <FadeIn delay={0.25}>
                 <div className="rounded-xl bg-[#1a1a1a] border border-[#2a2a2a]">
@@ -937,14 +1048,10 @@ export default function PeladaDetailPage({ params }: Props) {
                         {pelada.limite_por_ocorrencia || 25}
                       </span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-[#6b7280]">Link</span>
-                      <button
-                        onClick={handleCopyLink}
-                        className="text-[#00e676] hover:underline"
-                      >
-                        Copiar
-                      </button>
+                    <div className="flex justify-between">                          <span className="text-[#6b7280]">Tipo</span>
+                      <span className="text-[#fafafa]">
+                        {pelada.recorrente ? "Recorrente" : "Avulsa"}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -953,6 +1060,122 @@ export default function PeladaDetailPage({ params }: Props) {
           </div>
         </PageTransition>
       </main>
+
+      {/* ========== MODAL ADICIONAR JOGADOR ========== */}
+      <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlus className="h-5 w-5 text-[#00e676]" />
+              Adicionar Jogador
+            </DialogTitle>
+            <DialogDescription>
+              Cadastre manualmente um novo jogador na pelada.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="add-nome">Nome do jogador *</Label>
+              <Input
+                id="add-nome"
+                value={addNome}
+                onChange={(e) => setAddNome(e.target.value)}
+                placeholder="Ex: João Silva"
+                disabled={savingAdd}
+                onKeyDown={(e) => e.key === "Enter" && handleAddJogador()}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="add-tipo">Tipo (informativo)</Label>
+              <Select value={addTipo} onValueChange={setAddTipo} disabled={savingAdd}>
+                <SelectTrigger id="add-tipo">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="diarista">Diarista</SelectItem>
+                  <SelectItem value="mensalista">Mensalista</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddModal(false)} disabled={savingAdd}>
+              Cancelar
+            </Button>
+            <Button variant="glow" onClick={handleAddJogador} disabled={!addNome.trim() || savingAdd}>
+              {savingAdd ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+              Adicionar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ========== MODAL EDITAR NOME ========== */}
+      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="h-5 w-5 text-[#00e676]" />
+              Editar Nome
+            </DialogTitle>
+            <DialogDescription>
+              Altere o nome do jogador.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="edit-nome">Nome do jogador *</Label>
+              <Input
+                id="edit-nome"
+                value={editNome}
+                onChange={(e) => setEditNome(e.target.value)}
+                placeholder="Ex: João Silva"
+                disabled={savingEdit}
+                onKeyDown={(e) => e.key === "Enter" && handleConfirmEdit()}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditModal(false)} disabled={savingEdit}>
+              Cancelar
+            </Button>
+            <Button variant="glow" onClick={handleConfirmEdit} disabled={!editNome.trim() || savingEdit}>
+              {savingEdit ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Pencil className="mr-2 h-4 w-4" />}
+              Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ========== MODAL REMOVER JOGADOR ========== */}
+      <Dialog open={showRemoveModal} onOpenChange={setShowRemoveModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-[#ff5252]">
+              <Trash2 className="h-5 w-5" />
+              Remover Jogador
+            </DialogTitle>
+            <DialogDescription>
+              Tem certeza que deseja remover <strong>{removeTarget?.profile?.nome || "este jogador"}</strong> da pelada?
+              Confirmações futuras e posição na fila de espera também serão removidas.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRemoveModal(false)} disabled={removing}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmRemove}
+              disabled={removing}
+              className="bg-[#ff5252] hover:bg-[#ff5252]/80 text-white"
+            >
+              {removing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+              Remover
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -20,10 +20,8 @@ import {
   Settings,
   ChevronRight,
   Loader2,
-  Copy,
   Settings2,
   Sparkles,
-  CreditCard,
   CheckCircle2,
   Shield,
 } from "lucide-react"
@@ -85,16 +83,6 @@ export default function DashboardPage() {
     const authService = new AuthService(supabase)
     await authService.logout()
     toast({ title: "Até logo!", description: "Você saiu da sua conta." })
-  }
-
-  const copyInviteLink = (pelada: Pelada) => {
-    const link = `${window.location.origin}/pelada/entrar/${pelada.invite_code}`
-    navigator.clipboard.writeText(link)
-    toast({
-      title: "Link copiado!",
-      description: "Link de convite copiado para a área de transferência.",
-      variant: "success",
-    })
   }
 
   if (loading) {
@@ -228,7 +216,7 @@ export default function DashboardPage() {
                   <EmptyState
                     icon={Calendar}
                     title="Nenhuma pelada ainda"
-                    description="Crie sua primeira pelada ou entre em uma através de um link de convite."
+                    description="Crie sua primeira pelada para começar a organizar os jogos."
                     action={
                       <Link href="/pelada/create">
                         <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
@@ -262,19 +250,11 @@ export default function DashboardPage() {
                                 )}
                               </div>
                               <p className="text-sm text-[#6b7280]">
-                                {pelada.jogadores_por_time}v{pelada.jogadores_por_time} · {pelada.numero_times} times · {pelada.limite_jogadores} jogadores
+                                {pelada.jogadores_por_time}v{pelada.jogadores_por_time} · {pelada.numero_times} times
                               </p>
                             </div>
                           </div>
                           <div className="flex items-center gap-1">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => copyInviteLink(pelada)}
-                              title="Copiar link de convite"
-                            >
-                              <Copy className="h-4 w-4" />
-                            </Button>
                             <Link href={`/pelada/${pelada.id}`}>
                               <Button variant="ghost" size="sm">
                                 <ChevronRight className="h-4 w-4" />

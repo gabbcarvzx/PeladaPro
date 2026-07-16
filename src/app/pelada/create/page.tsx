@@ -47,7 +47,6 @@ export default function CreatePeladaPage() {
   const [descricao, setDescricao] = useState("")
   const [local, setLocal] = useState("")
   const [data, setData] = useState("")
-  const [limiteJogadores, setLimiteJogadores] = useState("20")
   const [limitePorOcorrencia, setLimitePorOcorrencia] = useState("25")
   const [numeroTimes, setNumeroTimes] = useState("2")
   const [jogadoresPorTime, setJogadoresPorTime] = useState("5")
@@ -209,7 +208,6 @@ export default function CreatePeladaPage() {
         descricao: descricao || undefined,
         local: local || undefined,
         data: recorrente ? undefined : data || undefined,
-        limite_jogadores: parseInt(limiteJogadores),
         limite_por_ocorrencia: parseInt(limitePorOcorrencia),
         numero_times: parseInt(numeroTimes),
         jogadores_por_time: parseInt(jogadoresPorTime),
@@ -222,7 +220,7 @@ export default function CreatePeladaPage() {
       if (pelada) {
         toast({
           title: "Pelada criada! 🎉",
-          description: `"${pelada.nome}" foi criada com sucesso. Compartilhe o link de convite!`,
+          description: `"${pelada.nome}" foi criada com sucesso. Agora adicione os jogadores manualmente.`,
           variant: "success",
         })
         router.push(`/pelada/${pelada.id}`)
@@ -240,12 +238,10 @@ export default function CreatePeladaPage() {
     }
   }
 
-  const totalJogadores = parseInt(limiteJogadores)
   const vagasPorData = parseInt(limitePorOcorrencia)
   const totalTimes = parseInt(numeroTimes)
   const porTime = parseInt(jogadoresPorTime)
   const capacidadeTimes = totalTimes * porTime
-  const capacidadeOk = capacidadeTimes <= totalJogadores
 
   return (
     <div className="min-h-screen bg-muted/20">
@@ -415,30 +411,6 @@ export default function CreatePeladaPage() {
                     </h3>
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      {/* Limite de participantes */}
-                      <div className="space-y-2">
-                        <Label>Limite de participantes</Label>
-                        <Select
-                          value={limiteJogadores}
-                          onValueChange={setLimiteJogadores}
-                        >
-                          <SelectTrigger>
-                            <Users className="mr-2 h-4 w-4" />
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {Array.from(
-                              { length: PELADA_LIMITES.MAX_JOGADORES - PELADA_LIMITES.MIN_JOGADORES + 1 },
-                              (_, i) => i + PELADA_LIMITES.MIN_JOGADORES,
-                            ).map((n) => (
-                              <SelectItem key={n} value={n.toString()}>
-                                {n} participantes
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
                       {/* Número de times */}
                       <div className="space-y-2">
                         <Label>Número de times</Label>
@@ -507,7 +479,7 @@ export default function CreatePeladaPage() {
                           </SelectContent>
                         </Select>
                         <p className="text-xs text-muted-foreground">
-                          Máximo de confirmados por ocorrência (diaristas). Mensalistas sempre entram.
+                          Máximo de jogadores confirmados por data.
                         </p>
                       </div>
                     </div>
@@ -516,30 +488,16 @@ export default function CreatePeladaPage() {
                     <motion.div
                       initial={{ opacity: 0, y: -10 }}
                       animate={{ opacity: 1, y: 0 }}
-                      className={`mt-4 p-4 rounded-lg ${
-                        capacidadeOk
-                          ? "bg-[#00e676]/5 border border-[#00e676]/20"
-                          : "bg-[#ff5252]/5 border border-[#ff5252]/20"
-                      }`}
+                      className="mt-4 p-4 rounded-lg bg-[#00e676]/5 border border-[#00e676]/20"
                     >
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-muted-foreground">
                           {totalTimes} times × {porTime} jogadores =
                         </span>
-                        <span
-                          className={`font-semibold ${
-                            capacidadeOk ? "text-[#00e676]" : "text-[#ff5252]"
-                          }`}
-                        >
-                          {capacidadeTimes} vagas · {totalJogadores} participantes · {vagasPorData} por data
+                        <span className="font-semibold text-[#00e676]">
+                          {capacidadeTimes} vagas nos times · {vagasPorData} por data
                         </span>
                       </div>
-                      {!capacidadeOk && (
-                        <p className="text-xs text-[#ff5252] mt-1">
-                          A capacidade dos times ({capacidadeTimes}) excede o limite de
-                          jogadores ({totalJogadores}). Ajuste os valores.
-                        </p>
-                      )}
                     </motion.div>
                   </div>
 
@@ -548,7 +506,7 @@ export default function CreatePeladaPage() {
                       type="submit"
                       variant="gradient"
                       size="lg"
-                      disabled={saving || !capacidadeOk}
+                      disabled={saving}
                     >
                       {saving ? (
                         <Loader2 className="mr-2 h-5 w-5 animate-spin" />

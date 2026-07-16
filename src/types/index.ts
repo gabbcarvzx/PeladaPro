@@ -6,7 +6,7 @@ export type PlayerType = "mensalista" | "diarista"
 
 export type ConfirmacaoStatus = "pendente" | "confirmado" | "recusado"
 
-export type SorteioModo = "aleatorio" | "ordem_chegada" | "priorizar_mensalistas" | "equilibrado"
+export type SorteioModo = "ordem_chegada"
 
 /** Apenas campos editáveis do perfil pelo usuário */
 export interface ProfileUpdate {
@@ -32,10 +32,7 @@ export interface Pelada {
   id: string
   nome: string
   descricao: string | null
-  link_convite: string
-  invite_code: string
   admin_id: string
-  limite_jogadores: number
   limite_por_ocorrencia: number
   numero_times: number
   jogadores_por_time: number
@@ -44,7 +41,6 @@ export interface Pelada {
   recorrente: boolean
   dia_semana: number | null
   horario: string | null
-  is_public: boolean
   created_at: string
 }
 
@@ -72,6 +68,7 @@ export interface ConfirmacaoDia {
   data_jogo: string
   status: ConfirmacaoStatus
   ordem_chegada: number | null
+  hora_chegada: string | null
   pelada_ocorrencia_id?: string | null
   created_at: string
   profile?: Profile
@@ -83,7 +80,6 @@ export interface ListaEspera {
   user_id: string
   data_jogo: string
   posicao: number
-  prioridade: PlayerType
   pelada_ocorrencia_id?: string | null
   created_at: string
   profile?: Profile
