@@ -415,7 +415,7 @@ export default function DiaDeJogoPage({ params }: Props) {
             <p className="text-[#6b7280] mb-6 text-lg">
               Os check-ins foram finalizados para esta data.
             </p>
-            <Link href={`/pelada/${peladaId}/sorteio/${peladaId}`}>
+            <Link href={`/pelada/sorteio/${peladaId}`}>
               <Button variant="glow" size="lg">
                 <Zap className="mr-2 h-5 w-5" />
                 Ir para Sorteio
@@ -640,7 +640,7 @@ export default function DiaDeJogoPage({ params }: Props) {
       {ocorrenciaAtual && ocorrenciaAtual.status !== "encerrada" && (
         <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/90 to-transparent">
           <div className="max-w-3xl mx-auto flex gap-3">
-            <Link href={`/pelada/${peladaId}/sorteio/${peladaId}`} className="flex-1">
+            <Link href={`/pelada/sorteio/${peladaId}`} className="flex-1">
               <Button variant="glow" size="lg" className="w-full h-14 text-base font-bold">
                 <Zap className="mr-2 h-5 w-5" />
                 Ir para Sorteio
