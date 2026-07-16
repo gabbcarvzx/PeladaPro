@@ -82,6 +82,7 @@ create policy "Admin pode adicionar participantes"
   );
 
 -- Apenas admin pode remover participantes
+drop policy if exists "Admin pode remover participantes" on public.pelada_participantes;
 create policy "Admin pode remover participantes"
   on public.pelada_participantes for delete
   to authenticated
