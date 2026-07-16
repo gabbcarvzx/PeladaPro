@@ -311,10 +311,106 @@ export default function AoVivoPage({ params }: Props) {
           title: `Confrontos iniciados! ⏱️ ${durationMinutes || selectedDuration} min`,
           variant: "success",
         })
+      } else {
+        // Tenta fallback com gerarConfrontoSimplificado
+        console.log("[AO-VIVO] iniciarConfrontos retornou null, tentando fallback...")
+        const times = ultimoSorteio.times as { nome: string; jogadores: TimeSorteioJogador[] }[]
+        if (Array.isArray(times) && times.length >= 2) {
+          const confronto2 = await confrontoService.gerarConfrontoSimplificado(
+            peladaId,
+            times.slice(0, 2).map(t => ({
+              nome: t.nome,
+              jogadores: t.jogadores || [],
+            })),
+            tempoLimite,
+            ocorrenciaAtual?.id,
+          )
+          if (confronto2) {
+            setConfrontoAtual(confronto2)
+            toast({
+              title: `Confrontos iniciados! ⏱️ ${durationMinutes || selectedDuration} min`,
+              variant: "success",
+            })
+            return
+          }
+        }
+        toast({
+          title: "Erro ao iniciar confrontos",
+          description: "Não foi possível criar o confronto. Tente usar o botão 'Gerar Confrontos Simplificado'.",
+          variant: "destructive",
+        })
       }
     } catch (error) {
       toast({
         title: "Erro ao iniciar confrontos",
+        description: error instanceof Error ? error.message : "Erro desconhecido",
+        variant: "destructive",
+      })
+    } finally {
+      setIsIniciando(false)
+    }
+  }
+
+  /**
+   * Gera confronto simplificado — usa os dados já parseados do último sorteio
+   * e cria o primeiro confronto diretamente, sem depender do fluxo complexo.
+   */
+  const handleGerarConfronto = async (durationMinutes?: number) => {
+    if (!pelada || !isAdmin) return
+    setIsIniciando(true)
+    setShowTimerConfig(false)
+    try {
+      const sorteios = await peladaService.getHistoricoSorteios(peladaId)
+      if (sorteios.length === 0) {
+        toast({
+          title: "Nenhum sorteio encontrado",
+          description: "Realize um sorteio antes de gerar confrontos.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      // getHistoricoSorteios já parseia os times (parserTimes)
+      const ultimoSorteio = sorteios[0]
+      const times = Array.isArray(ultimoSorteio.times) ? ultimoSorteio.times : []
+
+      if (times.length < 2) {
+        toast({
+          title: "Times insuficientes",
+          description: "São necessários pelo menos 2 times para gerar confrontos.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const tempoLimite = (durationMinutes || selectedDuration) * 60
+      const confronto = await confrontoService.gerarConfrontoSimplificado(
+        peladaId,
+        times.map(t => ({
+          nome: t.nome,
+          jogadores: t.jogadores || [],
+        })),
+        tempoLimite,
+        ocorrenciaAtual?.id,
+      )
+
+      if (confronto) {
+        setConfrontoAtual(confronto)
+        toast({
+          title: `Confronto gerado com sucesso! ⚔️ ${tempoLimite / 60} min`,
+          variant: "success",
+        })
+      } else {
+        toast({
+          title: "Erro ao gerar confronto",
+          description: "O confronto não pôde ser criado. Verifique se já existe um confronto em andamento.",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("[AO-VIVO] Erro ao gerar confronto:", error)
+      toast({
+        title: "Erro ao gerar confronto",
         description: error instanceof Error ? error.message : "Erro desconhecido",
         variant: "destructive",
       })
@@ -450,19 +546,36 @@ export default function AoVivoPage({ params }: Props) {
             </div>
             <div className="flex items-center gap-2">
               {isAdmin && !confrontoAtual && (
-                <Button
-                  variant="glow"
-                  size="sm"
-                  onClick={() => setShowTimerConfig(true)}
-                  disabled={isIniciando}
-                >
-                  {isIniciando ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Play className="h-4 w-4" />
-                  )}
-                  Iniciar Confrontos
-                </Button>
+                <>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleGerarConfronto(10)}
+                    disabled={isIniciando}
+                    className="text-xs"
+                    title="Gera confronto simplificado usando último sorteio"
+                  >
+                    {isIniciando ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <CheckCircle2 className="h-4 w-4" />
+                    )}
+                    Gerar Confronto
+                  </Button>
+                  <Button
+                    variant="glow"
+                    size="sm"
+                    onClick={() => setShowTimerConfig(true)}
+                    disabled={isIniciando}
+                  >
+                    {isIniciando ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Play className="h-4 w-4" />
+                    )}
+                    Iniciar Confrontos
+                  </Button>
+                </>
               )}
             </div>
           </div>
@@ -624,21 +737,34 @@ export default function AoVivoPage({ params }: Props) {
                     {isAdmin
                       ? "Clique em \"Iniciar Confrontos\" para uma nova rodada."
                       : "Aguardando nova rodada de confrontos."}
-                  </p>
-                  {isAdmin && (
-                    <Button
-                      variant="glow"
-                      onClick={() => setShowTimerConfig(true)}
-                      disabled={isIniciando}
-                    >
-                      {isIniciando ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Play className="mr-2 h-4 w-4" />
-                      )}
-                      Nova Rodada
-                    </Button>
-                  )}
+                  </p>                    {isAdmin && (
+                      <div className="flex gap-2 justify-center">
+                        <Button
+                          variant="ghost"
+                          onClick={() => handleGerarConfronto(10)}
+                          disabled={isIniciando}
+                        >
+                          {isIniciando ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <CheckCircle2 className="mr-2 h-4 w-4" />
+                          )}
+                          Gerar Confronto
+                        </Button>
+                        <Button
+                          variant="glow"
+                          onClick={() => setShowTimerConfig(true)}
+                          disabled={isIniciando}
+                        >
+                          {isIniciando ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Play className="mr-2 h-4 w-4" />
+                          )}
+                          Nova Rodada
+                        </Button>
+                      </div>
+                    )}
                 </CardContent>
               </Card>
             </FadeIn>

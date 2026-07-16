@@ -18,40 +18,50 @@ export class ConfrontoService {
    * Cria a fila circular de times e gera o primeiro confronto.
    */
   async iniciarConfrontos(peladaId: string, sorteioId: string, tempoLimite?: number, ocorrenciaId?: string): Promise<Confronto | null> {
+    console.log("[CONFRONTO] iniciarConfrontos chamado", { peladaId, sorteioId, tempoLimite, ocorrenciaId })
+
     // Proteção: verifica se o admin tem permissão
     const permService = new PermissionService(this.supabase)
     await permService.assertCanManagePelada(peladaId)
 
     // Busca o sorteio com os times
-    const { data: sorteio } = await this.supabase
+    const { data: sorteio, error: errSorteio } = await this.supabase
       .from("historico_sorteios")
       .select("*")
       .eq("id", sorteioId)
       .single()
 
-    if (!sorteio) throw new Error("Sorteio não encontrado")
+    if (errSorteio || !sorteio) {
+      console.error("[CONFRONTO] Erro ao buscar sorteio:", errSorteio)
+      throw new Error("Sorteio não encontrado")
+    }
 
     // 🛡️ Parseia times: registros antigos podem ter string no lugar de array
-    // (devido a double JSON.stringify que foi corrigido)
     const timesRaw = (sorteio as unknown as HistoricoSorteio).times
+    console.log("[CONFRONTO] timesRaw type:", typeof timesRaw, Array.isArray(timesRaw) ? "array" : typeof timesRaw)
     const times = this.parseTimes(timesRaw)
+    console.log("[CONFRONTO] times parsed:", times.length, "times")
     if (times.length < 2) throw new Error("São necessários pelo menos 2 times")
 
     console.log(`[CONFRONTO] Iniciando confrontos: ${times.length} times: ${times.map(t => t.nome).join(", ")}`)
 
     // Verifica se já existem confrontos ativos para esta pelada
-    const { data: existentes } = await this.supabase
+    const { data: existentes, error: errExistentes } = await this.supabase
       .from("confrontos")
       .select("id")
       .eq("pelada_id", peladaId)
       .eq("status", "em_andamento")
 
+    if (errExistentes) {
+      console.error("[CONFRONTO] Erro ao verificar existentes:", errExistentes)
+      throw new Error(`Erro ao verificar confrontos existentes: ${errExistentes.message}`)
+    }
+
     if (existentes && existentes.length > 0) {
       throw new Error("Já existem confrontos em andamento para esta pelada")
     }
 
-    // Fila circular: array de índices dos times
-    // Cada item: { timeIndex, jogadores }
+    // Fila circular: array de times
     type TimeFila = {
       nome: string
       jogadores: TimeSorteioJogador[]
@@ -62,18 +72,19 @@ export class ConfrontoService {
       jogadores: t.jogadores,
     }))
 
-    // Salva a fila no banco para uso futuro
-    // A fila salva como JSONB junto com os confrontos
-    const filaJson = JSON.stringify(filaTimes)
+    // 🐛 BUG FIX: A fila deve conter APENAS os times restantes (excluindo os 2 primeiros que jogam)
+    const filaInicial = filaTimes.slice(2)
 
-    // Cria o primeiro confronto: time[0] vs time[1]
+    console.log(`[CONFRONTO] 1º confronto: ${filaTimes[0].nome} vs ${filaTimes[1].nome}, fila: ${filaInicial.map(t => t.nome).join(", ")}`)
+
+    // Cria o primeiro confronto
     const primeiro = await this.criarConfronto(
       peladaId,
       sorteioId,
       filaTimes[0],
       filaTimes[1],
       1,
-      filaJson,
+      filaInicial, // Array direto — fila_restante é jsonb
       tempoLimite,
       ocorrenciaId,
     )
@@ -82,40 +93,115 @@ export class ConfrontoService {
   }
 
   /**
+   * Gera confronto simplificado a partir de dados já parseados.
+   * Usado como fallback quando iniciarConfrontos padrão falha.
+   * Recebe os times já parseados (array) e cria o primeiro confronto.
+   */
+  async gerarConfrontoSimplificado(
+    peladaId: string,
+    times: { nome: string; jogadores: TimeSorteioJogador[] }[],
+    tempoLimite?: number,
+    ocorrenciaId?: string,
+  ): Promise<Confronto | null> {
+    const logTag = "[GERAR-CONFRONTO-SIMPLIFICADO]"
+    console.log(`${logTag} Gerando confronto para ${times.length} times`)
+
+    const permService = new PermissionService(this.supabase)
+    await permService.assertCanManagePelada(peladaId)
+
+    if (times.length < 2) throw new Error("São necessários pelo menos 2 times")
+
+    // Verifica se já existem confrontos ativos
+    const { data: existentes } = await this.supabase
+      .from("confrontos")
+      .select("id")
+      .eq("pelada_id", peladaId)
+      .eq("status", "em_andamento")
+
+    if (existentes && existentes.length > 0) {
+      throw new Error("Já existem confrontos em andamento para esta pelada")
+    }
+
+    // Busca o último sorteio para obter o ID
+    const { data: ultimoSorteio } = await this.supabase
+      .from("historico_sorteios")
+      .select("id")
+      .eq("pelada_id", peladaId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    const sorteioId = ultimoSorteio?.id || null
+
+    // Fila restante = times excluindo os 2 primeiros
+    const filaRestante = times.slice(2)
+
+    // Cria o primeiro confronto com time[0] vs time[1]
+    // sorteioId pode ser null (sem sorteio encontrado) — coluna aceita null
+    const confronto = await this.criarConfronto(
+      peladaId,
+      sorteioId, // pode ser null — FK aceita null
+      {
+        nome: times[0].nome,
+        jogadores: times[0].jogadores,
+      },
+      {
+        nome: times[1].nome,
+        jogadores: times[1].jogadores,
+      },
+      1,
+      filaRestante, // Array direto para jsonb
+      tempoLimite,
+      ocorrenciaId,
+    )
+
+    return confronto
+  }
+
+  /**
    * Cria um confronto no banco
    */
   private async criarConfronto(
     peladaId: string,
-    sorteioId: string,
+    sorteioId: string | null,
     timeA: { nome: string; jogadores: TimeSorteioJogador[] },
     timeB: { nome: string; jogadores: TimeSorteioJogador[] },
     ordem: number,
-    filaRestante?: string,
+    filaRestante?: { nome: string; jogadores: TimeSorteioJogador[] }[],
     tempoLimite?: number,
     ocorrenciaId?: string,
   ): Promise<Confronto | null> {
+    const logTag = "[CRIAR-CONFRONTO]"
     const inserData: Record<string, unknown> = {
       pelada_id: peladaId,
       sorteio_id: sorteioId,
       time_a_nome: timeA.nome,
       time_b_nome: timeB.nome,
-      time_a_jogadores: timeA.jogadores, // Array direto — supabase serializa como jsonb
+      time_a_jogadores: timeA.jogadores,
       time_b_jogadores: timeB.jogadores,
       ordem,
       tempo_limite: tempoLimite || 600,
       ...(ocorrenciaId ? { pelada_ocorrencia_id: ocorrenciaId } : {}),
     }
 
-    if (filaRestante) {
-      inserData.fila_restante = filaRestante
+    if (filaRestante && filaRestante.length > 0) {
+      inserData.fila_restante = filaRestante // Array direto — coluna é jsonb
     }
 
-    const { data } = await this.supabase
+    console.log(`${logTag} Inserindo confronto: ${timeA.nome} vs ${timeB.nome}, fila=${filaRestante?.length || 0} times`)
+
+    const { data, error } = await this.supabase
       .from("confrontos")
       .insert(inserData)
       .select()
       .single()
 
+    if (error) {
+      console.error(`${logTag} Erro ao inserir:`, error)
+      throw new Error(`Erro ao criar confronto: ${error.message}`)
+    }
+
+    console.log(`${logTag} Confronto criado: ${data?.id}`)
     return data as Confronto | null
   }
 
@@ -269,6 +355,9 @@ export class ConfrontoService {
     confrontoId: string,
     resultado: "time_a" | "time_b" | "empate",
   ): Promise<{ confrontoFinalizado: Confronto; proximoConfronto: Confronto | null }> {
+    const logTag = "[FINALIZAR-CONFRONTO]"
+    console.log(`${logTag} INICIO: confrontoId=${confrontoId}, resultado=${resultado}`)
+
     // Proteção: verifica se o admin tem permissão
     await this.verificarAdminPermissao(confrontoId)
 
@@ -289,116 +378,141 @@ export class ConfrontoService {
 
     if (!finalizado) throw new Error("Erro ao finalizar confronto")
 
-    // Busca a fila restante
+    // ==========================================
+    // LÓGICA DE ROTAÇÃO CIRCULAR
+    // ==========================================
+    //
+    // Exemplo com 5 times [A, B, C, D, E]:
+    //   Fila inicial (após 1º confronto A x B): [C, D, E]
+    //
+    // Vitória de A sobre B:
+    //   A permanece, B vai para o FINAL da fila
+    //   Próximo da fila (C) entra para enfrentar A
+    //   Nova fila: [D, E, B]
+    //
+    // Empate A x B:
+    //   Ambos saem, C e D entram
+    //   A e B vão para o FINAL da fila
+    //   Nova fila: [E, A, B]
+    // ==========================================
+
     const filaRestante = this.parseFila(confronto)
-    const vencedor = this.getVencedor(confronto, resultado)
     const tempoLimite = confronto.tempo_limite
     const ocorrenciaId = confronto.pelada_ocorrencia_id ?? undefined
 
-    // Gera o próximo confronto
+    console.log(`${logTag} Fila atual: [${filaRestante.map(t => t.nome).join(", ")}]`)
+
     let proximoConfronto: Confronto | null = null
 
     if (resultado === "empate") {
-      // Ambos saem — puxa os dois próximos da fila
-      const proximos = filaRestante.slice(0, 2)
-      if (proximos.length >= 2) {
-        // Remove os dois primeiros da fila
-        const novaFila = filaRestante.slice(2)
+      // ==========================================
+      // REGRA DE EMPATE: ambos saem, próximos 2 da fila entram
+      // ==========================================
+      const timeA = {
+        nome: confronto.time_a_nome,
+        jogadores: this.parseJogadores(confronto.time_a_jogadores),
+      }
+      const timeB = {
+        nome: confronto.time_b_nome,
+        jogadores: this.parseJogadores(confronto.time_b_jogadores),
+      }
+
+      if (filaRestante.length >= 2) {
+        // Próximos 2 da fila entram
+        const entrantes = filaRestante.slice(0, 2)
+        // Restante da fila + times que empataram vão para o FINAL
+        const novaFila = [...filaRestante.slice(2), timeA, timeB]
+
+        console.log(`${logTag} EMPATE: ${timeA.nome} e ${timeB.nome} saem, ${entrantes[0].nome} vs ${entrantes[1].nome}`)
+        console.log(`${logTag} Nova fila: [${novaFila.map(t => t.nome).join(", ")}]`)
+
         proximoConfronto = await this.criarConfronto(
           confronto.pelada_id,
           confronto.sorteio_id!,
-          proximos[0],
-          proximos[1],
+          entrantes[0],
+          entrantes[1],
           confronto.ordem + 1,
-          JSON.stringify(novaFila),
+          novaFila, // Array direto — coluna é jsonb
           tempoLimite,
           ocorrenciaId,
         )
-      } else if (proximos.length === 1) {
-        // Só tem 1 time na fila — ele enfrenta o time A (que empatou) de volta
-        // Na verdade, vamos reiniciar a ordem original
-        const filaReiniciada = this.getFilaOriginalOuReinicia(confronto, filaRestante)
-        if (filaReiniciada.length >= 2) {
-          proximoConfronto = await this.criarConfronto(
-            confronto.pelada_id,
-            confronto.sorteio_id!,
-            filaReiniciada[0],
-            filaReiniciada[1],
-            confronto.ordem + 1,
-            JSON.stringify(filaReiniciada.slice(2)),
-            tempoLimite,
-            ocorrenciaId,
-          )
-        }
+      } else if (filaRestante.length === 1) {
+        // Só 1 time na fila — ele enfrenta time A, time B vai pro final
+        const entrante = filaRestante[0]
+        const novaFila = [timeB]
+
+        console.log(`${logTag} EMPATE (fila=1): ${timeA.nome} vs ${entrante.nome}, fila: [${novaFila.map(t => t.nome).join(", ")}]`)
+
+        proximoConfronto = await this.criarConfronto(
+          confronto.pelada_id,
+          confronto.sorteio_id!,
+          timeA,
+          entrante,
+          confronto.ordem + 1,
+          novaFila, // Array direto — coluna é jsonb
+          tempoLimite,
+          ocorrenciaId,
+        )
       } else {
-        // Fila vazia — reinicia com os times originais
-        const timesOriginais = this.getTimesOriginais(confronto)
-        if (timesOriginais.length >= 2) {
-          proximoConfronto = await this.criarConfronto(
-            confronto.pelada_id,
-            confronto.sorteio_id!,
-            timesOriginais[0],
-            timesOriginais[1],
-            confronto.ordem + 1,
-            JSON.stringify(timesOriginais.slice(2)),
-            tempoLimite,
-            ocorrenciaId,
-          )
-        }
+        // Fila vazia — reinicia com os times que empataram
+        console.log(`${logTag} EMPATE (fila vazia): ${timeA.nome} vs ${timeB.nome} (reinicio)`)
+
+        proximoConfronto = await this.criarConfronto(
+          confronto.pelada_id,
+          confronto.sorteio_id!,
+          timeA,
+          timeB,
+          confronto.ordem + 1,
+          undefined, // fila vazia
+          tempoLimite,
+          ocorrenciaId,
+        )
       }
     } else {
-      // Teve vencedor — vencedor fica, perdedor sai, próximo da fila entra
-      const proximo = filaRestante.length > 0 ? filaRestante[0] : null
-      const novaFila = filaRestante.slice(1)
+      // ==========================================
+      // REGRA DE VITÓRIA: vencedor fica, perdedor vai pro final, próximo da fila entra
+      // ==========================================
+      const vencedor = this.getVencedor(confronto, resultado)!
+      const perdedorNome = resultado === "time_a" ? confronto.time_b_nome : confronto.time_a_nome
+      const perdedor = {
+        nome: perdedorNome,
+        jogadores: this.parseJogadores(
+          resultado === "time_a" ? confronto.time_b_jogadores : confronto.time_a_jogadores,
+        ),
+      }
 
-      if (proximo) {
+      if (filaRestante.length >= 1) {
+        // Próximo da fila entra, perdedor vai pro final
+        const entrante = filaRestante[0]
+        const novaFila = [...filaRestante.slice(1), perdedor]
+
+        console.log(`${logTag} VITÓRIA: ${vencedor.nome} vence, ${perdedor.nome} vai pro final, ${entrante.nome} entra`)
+        console.log(`${logTag} Nova fila: [${novaFila.map(t => t.nome).join(", ")}]`)
+
         proximoConfronto = await this.criarConfronto(
           confronto.pelada_id,
           confronto.sorteio_id!,
-          vencedor!,
-          proximo,
+          vencedor,
+          entrante,
           confronto.ordem + 1,
-          JSON.stringify(novaFila),
+          novaFila, // Array direto — coluna é jsonb
           tempoLimite,
           ocorrenciaId,
         )
       } else {
-        // Fila vazia — reinicia com os times originais (vencedor + alguém)
-        const timesOriginais = this.getTimesOriginais(confronto)
-        // Remove o vencedor e o perdedor dos originais pra não repetir
-        const vencedorNome = vencedor?.nome
-        const perdedorNome = resultado === "time_a" ? confronto.time_b_nome : confronto.time_a_nome
-        const restantes = timesOriginais.filter(
-          (t) => t.nome !== vencedorNome && t.nome !== perdedorNome,
-        )
+        // Fila vazia — vencedor enfrenta perdedor de novo
+        console.log(`${logTag} VITÓRIA (fila vazia): ${vencedor.nome} vs ${perdedor.nome} (reinicio)`)
 
-        if (restantes.length > 0) {
-          proximoConfronto = await this.criarConfronto(
-            confronto.pelada_id,
-            confronto.sorteio_id!,
-            vencedor!,
-            restantes[0],
-            confronto.ordem + 1,
-            JSON.stringify(restantes.slice(1)),
-            tempoLimite,
-            ocorrenciaId,
-          )
-        } else {
-          // Só tem 1 time restante — reinicia tudo
-          const filaReiniciada = this.getFilaOriginalOuReinicia(confronto, [])
-          if (filaReiniciada.length >= 2) {
-            proximoConfronto = await this.criarConfronto(
-              confronto.pelada_id,
-              confronto.sorteio_id!,
-              filaReiniciada[0],
-              filaReiniciada[1],
-              confronto.ordem + 1,
-              JSON.stringify(filaReiniciada.slice(2)),
-              tempoLimite,
-              ocorrenciaId,
-            )
-          }
-        }
+        proximoConfronto = await this.criarConfronto(
+          confronto.pelada_id,
+          confronto.sorteio_id!,
+          vencedor,
+          perdedor,
+          confronto.ordem + 1,
+          undefined, // fila vazia
+          tempoLimite,
+          ocorrenciaId,
+        )
       }
     }
 
@@ -471,53 +585,30 @@ export class ConfrontoService {
   /**
    * Parseia a fila restante de um confronto
    */
-  private parseFila(confronto: Confronto): { nome: string; jogadores: TimeSorteioJogador[] }[] {
-    if (!confronto.fila_restante) return []
-    try {
-      return JSON.parse(confronto.fila_restante) as { nome: string; jogadores: TimeSorteioJogador[] }[]
-    } catch {
-      return []
-    }
-  }
-
   /**
-   * Obtém os times originais do sorteio a partir do primeiro confronto da sequência
-   * ou reinicia a fila se não houver mais nenhum
+   * Parseia a fila restante de um confronto.
+   * Agora fila_restante é armazenada como jsonb (array), mas registros
+   * antigos podem ter string (double JSON.stringify).
    */
-  private getFilaOriginalOuReinicia(
-    confronto: Confronto,
-    filaAtual: { nome: string; jogadores: TimeSorteioJogador[] }[],
-  ): { nome: string; jogadores: TimeSorteioJogador[] }[] {
-    // Se temos times na fila atual, eles são nossa base
-    if (filaAtual.length >= 2) return filaAtual
+  private parseFila(confronto: Confronto): { nome: string; jogadores: TimeSorteioJogador[] }[] {
+    const raw = confronto.fila_restante
+    if (!raw) return []
 
-    // Reconstroi a partir dos times A e B + fila
-    const resultado = []
-    const jaVistos = new Set<string>()
+    // Se já é array (jsonb retorna direto como JS array)
+    if (Array.isArray(raw)) return raw as { nome: string; jogadores: TimeSorteioJogador[] }[]
 
-    // Time A do confronto atual
-    const timeA = {
-      nome: confronto.time_a_nome,
-      jogadores: this.parseJogadores(confronto.time_a_jogadores),
-    }
-    jaVistos.add(timeA.nome)
-
-    // Time B do confronto atual
-    const timeB = {
-      nome: confronto.time_b_nome,
-      jogadores: this.parseJogadores(confronto.time_b_jogadores),
-    }
-    jaVistos.add(timeB.nome)
-
-    // Times da fila
-    for (const t of filaAtual) {
-      if (!jaVistos.has(t.nome)) {
-        resultado.push(t)
-        jaVistos.add(t.nome)
+    // Se é string (registros antigos com double JSON.stringify)
+    if (typeof raw === "string") {
+      try {
+        const parsed = JSON.parse(raw)
+        if (Array.isArray(parsed)) return parsed as { nome: string; jogadores: TimeSorteioJogador[] }[]
+        return []
+      } catch {
+        return []
       }
     }
 
-    return [timeA, timeB, ...resultado]
+    return []
   }
 
   /**
@@ -529,26 +620,6 @@ export class ConfrontoService {
 
     const permService = new PermissionService(this.supabase)
     await permService.assertCanManagePelada(confronto.pelada_id)
-  }
-
-  /**
-   * Obtém todos os times originais do sorteio
-   * Busca no primeiro confronto da pelada que tem a fila completa
-   */
-  private getTimesOriginais(
-    confronto: Confronto,
-  ): { nome: string; jogadores: TimeSorteioJogador[] }[] {
-    const timeA = {
-      nome: confronto.time_a_nome,
-      jogadores: this.parseJogadores(confronto.time_a_jogadores),
-    }
-    const timeB = {
-      nome: confronto.time_b_nome,
-      jogadores: this.parseJogadores(confronto.time_b_jogadores),
-    }
-    const fila = this.parseFila(confronto)
-
-    return [timeA, timeB, ...fila]
   }
 
   // ==========================================
