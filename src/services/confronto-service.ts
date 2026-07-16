@@ -623,78 +623,133 @@ export class ConfrontoService {
   }
 
   // ==========================================
-  // TIMER
+  // CRONÔMETRO AO VIVO (contagem progressiva)
+  // ==========================================
+  //
+  // Lógica:
+  //   tempo_exibido = tempo_acumulado + (now() - tempo_inicio)  [se rodando]
+  //   tempo_exibido = tempo_acumulado                           [se pausado/parado]
+  //
+  // O banco é a fonte da verdade. O frontend apenas calcula
+  // o delta local para exibição em tempo real.
   // ==========================================
 
   /**
-   * Inicia/resume o timer de um confronto
+   * Inicia ou resume o cronômetro.
+   * - Se status = 'parado': define tempo_inicio = now(), status = 'rodando'
+   * - Se status = 'pausado': define novo tempo_inicio = now(), status = 'rodando'
+   *   (tempo_acumulado mantém o valor acumulado anterior)
    */
-  async iniciarTimer(confrontoId: string, tempoRestante?: number): Promise<Confronto | null> {
-    // Proteção: verifica se o admin tem permissão
+  async iniciarCronometro(confrontoId: string): Promise<Confronto | null> {
+    const logTag = "[CRONOMETRO]"
+    console.log(`${logTag} iniciar: confrontoId=${confrontoId}`)
+
     await this.verificarAdminPermissao(confrontoId)
-    const update: Record<string, unknown> = {
-      iniciado_em: new Date().toISOString(),
-    }
-    if (tempoRestante !== undefined) {
-      update.tempo_restante = tempoRestante
-    }
 
     const { data } = await this.supabase
       .from("confrontos")
-      .update(update)
+      .update({
+        tempo_inicio: new Date().toISOString(),
+        cronometro_status: "rodando",
+      })
       .eq("id", confrontoId)
       .select()
       .single()
 
+    if (!data) throw new Error("Erro ao iniciar cronômetro")
+    console.log(`${logTag} ✅ Cronômetro rodando`)
     return data as Confronto | null
   }
 
   /**
-   * Pausa o timer de um confronto, salvando o tempo restante
+   * Pausa o cronômetro: calcula o tempo decorrido desde tempo_inicio,
+   * soma ao tempo_acumulado, salva e marca como pausado.
    */
-  async pausarTimer(confrontoId: string): Promise<Confronto | null> {
-    // Proteção: verifica se o admin tem permissão
+  async pausarCronometro(confrontoId: string): Promise<Confronto | null> {
+    const logTag = "[CRONOMETRO]"
+    console.log(`${logTag} pausar: confrontoId=${confrontoId}`)
+
     await this.verificarAdminPermissao(confrontoId)
+
     const confronto = await this.getConfrontoById(confrontoId)
-    if (!confronto || !confronto.iniciado_em) {
-      throw new Error("Timer não está rodando")
+    if (!confronto) throw new Error("Confronto não encontrado")
+    if (confronto.cronometro_status !== "rodando") {
+      throw new Error("Cronômetro não está rodando")
     }
 
-    const tempoLimite = confronto.tempo_restante || confronto.tempo_limite
-    const inicio = new Date(confronto.iniciado_em).getTime()
-    const decorrido = Math.floor((Date.now() - inicio) / 1000)
-    const restante = Math.max(0, tempoLimite - decorrido)
+    // Calcula tempo decorrido desde o último início
+    const inicioMs = new Date(confronto.tempo_inicio!).getTime()
+    const decorrido = Math.floor((Date.now() - inicioMs) / 1000)
+    const novoAcumulado = (confronto.tempo_acumulado || 0) + decorrido
+
+    console.log(`${logTag} decorrido=${decorrido}s, acumulado=${novoAcumulado}s`)
 
     const { data } = await this.supabase
       .from("confrontos")
       .update({
-        iniciado_em: null,
-        tempo_restante: restante,
+        tempo_inicio: null,
+        tempo_pausado_em: new Date().toISOString(),
+        tempo_acumulado: novoAcumulado,
+        cronometro_status: "pausado",
       })
       .eq("id", confrontoId)
       .select()
       .single()
 
+    if (!data) throw new Error("Erro ao pausar cronômetro")
+    console.log(`${logTag} ✅ Cronômetro pausado em ${novoAcumulado}s`)
     return data as Confronto | null
   }
 
   /**
-   * Reseta o timer de um confronto para o tempo limite original
+   * Reseta o cronômetro: zera tempo_inicio, tempo_acumulado e volta para 'parado'.
    */
-  async resetarTimer(confrontoId: string): Promise<Confronto | null> {
-    // Proteção: verifica se o admin tem permissão
+  async resetarCronometro(confrontoId: string): Promise<Confronto | null> {
+    const logTag = "[CRONOMETRO]"
+    console.log(`${logTag} resetar: confrontoId=${confrontoId}`)
+
     await this.verificarAdminPermissao(confrontoId)
+
     const { data } = await this.supabase
       .from("confrontos")
       .update({
-        iniciado_em: null,
-        tempo_restante: null,
+        tempo_inicio: null,
+        tempo_pausado_em: null,
+        tempo_acumulado: 0,
+        cronometro_status: "parado",
       })
       .eq("id", confrontoId)
       .select()
       .single()
 
+    if (!data) throw new Error("Erro ao resetar cronômetro")
+    console.log(`${logTag} ✅ Cronômetro resetado`)
     return data as Confronto | null
+  }
+
+  /**
+   * Retorna o tempo decorrido em segundos para exibição.
+   * Esta função é chamada no FRONTEND para calcular o tempo atual.
+   *
+   * Regra:
+   *   status rodando => tempo_acumulado + (Date.now() - tempo_inicio)
+   *   status pausado => tempo_acumulado
+   *   status parado  => 0
+   */
+  static calcularTempoDecorrido(confronto: Confronto): number {
+    const acumulado = confronto.tempo_acumulado || 0
+
+    if (confronto.cronometro_status === "rodando" && confronto.tempo_inicio) {
+      const inicioMs = new Date(confronto.tempo_inicio).getTime()
+      const decorrido = Math.floor((Date.now() - inicioMs) / 1000)
+      return Math.max(0, acumulado + decorrido)
+    }
+
+    if (confronto.cronometro_status === "pausado") {
+      return Math.max(0, acumulado)
+    }
+
+    return 0
   }
 
   /**

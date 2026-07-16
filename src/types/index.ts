@@ -120,6 +120,10 @@ export interface Confronto {
   tempo_limite: number
   iniciado_em: string | null
   tempo_restante: number | null
+  tempo_inicio: string | null
+  tempo_pausado_em: string | null
+  tempo_acumulado: number
+  cronometro_status: "parado" | "rodando" | "pausado"
   ordem: number
   pelada_ocorrencia_id?: string | null
   created_at: string

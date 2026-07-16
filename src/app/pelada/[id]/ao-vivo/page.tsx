@@ -55,102 +55,57 @@ export default function AoVivoPage({ params }: Props) {
   const [animatingGoal, setAnimatingGoal] = useState<"a" | "b" | null>(null)
   const [showGolSelector, setShowGolSelector] = useState<"a" | "b" | null>(null)
   const [tempoDecorrido, setTempoDecorrido] = useState(0)
-  const [isTimerRunning, setIsTimerRunning] = useState(false)
+  const [cronometroRodando, setCronometroRodando] = useState(false)
   const [showTimerConfig, setShowTimerConfig] = useState(false)
   const [selectedDuration, setSelectedDuration] = useState(10)
   const [ocorrenciaAtual, setOcorrenciaAtual] = useState<PeladaOcorrencia | null>(null)
-  const autoFinalizedRef = useRef<string | null>(null)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const isAdmin = user?.id === pelada?.admin_id
 
-  // Calcular tempo restante do timer
-  const getTimerInfo = useCallback(() => {
-    if (!confrontoAtual) return { restante: 0, total: 300, progresso: 0, display: "00:00" }
+  // Calcular tempo decorrido do cronômetro (contagem progressiva)
 
-    const total = confrontoAtual.tempo_restante || confrontoAtual.tempo_limite
+  const getCronometroDisplay = useCallback((confronto: Confronto | null): {
+    segundos: number
+    display: string
+    status: "parado" | "rodando" | "pausado"
+  } => {
+    if (!confronto) return { segundos: 0, display: "00:00", status: "parado" }
 
-    if (confrontoAtual.iniciado_em) {
-      const inicio = new Date(confrontoAtual.iniciado_em).getTime()
-      const decorrido = Math.floor((Date.now() - inicio) / 1000)
-      const restante = Math.max(0, total - decorrido)
-      const progresso = total > 0 ? ((total - restante) / total) * 100 : 0
-      const min = Math.floor(restante / 60)
-      const seg = restante % 60
-      return {
-        restante,
-        total,
-        progresso,
-        display: `${String(min).padStart(2, "0")}:${String(seg).padStart(2, "0")}`,
-      }
-    }
+    const segundos = ConfrontoService.calcularTempoDecorrido(confronto)
+    const min = Math.floor(segundos / 60)
+    const seg = segundos % 60
 
-    // Timer pausado ou não iniciado
-    const restante = total
-    const min = Math.floor(restante / 60)
-    const seg = restante % 60
     return {
-      restante,
-      total,
-      progresso: 0,
+      segundos,
       display: `${String(min).padStart(2, "0")}:${String(seg).padStart(2, "0")}`,
+      status: confronto.cronometro_status,
     }
-  }, [confrontoAtual]) // tempoDecorrido não é usado no corpo, apenas força re-render
+  }, [])
 
-  // Timer countdown effect
+  // Efeito do cronômetro: atualiza a cada 1 segundo quando rodando
   useEffect(() => {
-    if (!confrontoAtual?.iniciado_em) {
-      setIsTimerRunning(false)
+    if (confrontoAtual?.cronometro_status === "rodando") {
+      setCronometroRodando(true)
+      intervalRef.current = setInterval(() => {
+        // Força re-render para atualizar o display
+        setTempoDecorrido((prev) => prev + 1)
+      }, 1000)
+    } else {
+      setCronometroRodando(false)
       if (intervalRef.current) {
         clearInterval(intervalRef.current)
         intervalRef.current = null
       }
-      return
     }
-
-    // Reseta o contador quando o timer inicia/resume
-    setTempoDecorrido(0)
-    setIsTimerRunning(true)
-
-    intervalRef.current = setInterval(() => {
-      setTempoDecorrido((prev) => prev + 1)
-    }, 1000)
 
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current)
         intervalRef.current = null
       }
-      setIsTimerRunning(false)
     }
-  }, [confrontoAtual?.iniciado_em, confrontoAtual?.id])
-
-  // Reseta o ref de finalização automática quando o confronto muda
-  useEffect(() => {
-    autoFinalizedRef.current = null
-  }, [confrontoAtual?.id])
-
-  // Auto-finalizar quando timer expirar
-  useEffect(() => {
-    if (!confrontoAtual || !confrontoAtual.iniciado_em || !isAdmin) return
-
-    // Evita finalizar o mesmo confronto mais de uma vez
-    if (autoFinalizedRef.current === confrontoAtual.id) return
-
-    const timerInfo = getTimerInfo()
-    if (timerInfo.restante <= 0) {
-      autoFinalizedRef.current = confrontoAtual.id
-
-      // Define vencedor como quem está na frente
-      if (confrontoAtual.placar_a > confrontoAtual.placar_b) {
-        handleFinalizar("time_a")
-      } else if (confrontoAtual.placar_b > confrontoAtual.placar_a) {
-        handleFinalizar("time_b")
-      } else {
-        handleFinalizar("empate")
-      }
-    }
-  }, [tempoDecorrido])
+  }, [confrontoAtual?.cronometro_status, confrontoAtual?.id])
 
   useEffect(() => {
     params.then((p) => setPeladaId(p.id))
@@ -266,25 +221,49 @@ export default function AoVivoPage({ params }: Props) {
     setHistorico(hist)
   }, [peladaId])
 
-  const handleIniciarTimer = async () => {
+  const handleIniciarCronometro = async () => {
     if (!confrontoAtual || !isAdmin) return
-    await confrontoService.iniciarTimer(confrontoAtual.id)
-    await refreshConfronto()
-    toast({ title: "Timer iniciado! ⏱️", variant: "success" })
+    try {
+      await confrontoService.iniciarCronometro(confrontoAtual.id)
+      await refreshConfronto()
+      toast({ title: "Cronômetro iniciado! ⏱️", variant: "success" })
+    } catch (error) {
+      toast({
+        title: "Erro ao iniciar cronômetro",
+        description: error instanceof Error ? error.message : "Erro desconhecido",
+        variant: "destructive",
+      })
+    }
   }
 
-  const handlePausarTimer = async () => {
+  const handlePausarCronometro = async () => {
     if (!confrontoAtual || !isAdmin) return
-    await confrontoService.pausarTimer(confrontoAtual.id)
-    await refreshConfronto()
-    toast({ title: "Timer pausado ⏸️" })
+    try {
+      await confrontoService.pausarCronometro(confrontoAtual.id)
+      await refreshConfronto()
+      toast({ title: "Cronômetro pausado ⏸️", variant: "success" })
+    } catch (error) {
+      toast({
+        title: "Erro ao pausar cronômetro",
+        description: error instanceof Error ? error.message : "Erro desconhecido",
+        variant: "destructive",
+      })
+    }
   }
 
-  const handleResetarTimer = async () => {
+  const handleResetarCronometro = async () => {
     if (!confrontoAtual || !isAdmin) return
-    await confrontoService.resetarTimer(confrontoAtual.id)
-    await refreshConfronto()
-    toast({ title: "Timer resetado 🔄" })
+    try {
+      await confrontoService.resetarCronometro(confrontoAtual.id)
+      await refreshConfronto()
+      toast({ title: "Cronômetro resetado 🔄", variant: "success" })
+    } catch (error) {
+      toast({
+        title: "Erro ao resetar cronômetro",
+        description: error instanceof Error ? error.message : "Erro desconhecido",
+        variant: "destructive",
+      })
+    }
   }
 
   const handleIniciar = async (durationMinutes?: number) => {
@@ -791,42 +770,54 @@ export default function AoVivoPage({ params }: Props) {
                 </AnimatePresence>
 
                 <div className="rounded-2xl bg-gradient-to-br from-[#1a1a1a] to-[#121212] border border-[#2a2a2a] overflow-hidden">
-                  {/* Timer */}
+                  {/* Cronômetro */}
                   {(() => {
-                    const tempoInfo = getTimerInfo()
-                    const isPausado = !confrontoAtual.iniciado_em
-                    const isAVencer = tempoInfo.restante <= 30 && tempoInfo.restante > 0
-                    const isEsgotado = tempoInfo.restante <= 0
+                    const info = getCronometroDisplay(confrontoAtual)
+                    const isRodando = info.status === "rodando"
+                    const isPausado = info.status === "pausado"
+                    const isParado = info.status === "parado"
                     return (
-                      <div className="border-b border-[#2a2a2a] px-6 py-3">
+                      <div className="border-b border-[#2a2a2a] px-6 py-4">
                         <div className="flex items-center justify-between gap-4">
                           <div className="flex items-center gap-3">
-                            {isTimerRunning ? (
-                              <Timer className={`h-5 w-5 ${isAVencer ? "text-red-500" : "text-[#00e676]"}`} />
+                            {isRodando ? (
+                              <Timer className="h-5 w-5 text-[#00e676]" />
                             ) : isPausado ? (
-                              <TimerOff className="h-5 w-5 text-muted-foreground" />
+                              <TimerOff className="h-5 w-5 text-yellow-500" />
                             ) : (
                               <Clock className="h-5 w-5 text-muted-foreground" />
                             )}
                             <motion.span
-                              key={tempoInfo.display}
-                              initial={isAVencer ? { scale: 1.1 } : undefined}
+                              key={info.display}
+                              initial={isRodando ? { scale: 1.05 } : undefined}
                               animate={{ scale: 1 }}
-                              className={`text-2xl font-mono font-bold tabular-nums ${
-                                isEsgotado
-                                  ? "text-red-500"
-                                  : isAVencer
-                                  ? "text-red-400"
-                                  : isTimerRunning
+                              className={`text-3xl md:text-4xl font-mono font-black tabular-nums ${
+                                isRodando
                                   ? "text-[#00e676]"
+                                  : isPausado
+                                  ? "text-yellow-500"
                                   : "text-muted-foreground"
                               }`}
                             >
-                              {isEsgotado ? "00:00" : tempoInfo.display}
+                              {info.display}
                             </motion.span>
-                            {isEsgotado && isTimerRunning && (
-                              <span className="text-xs text-red-500 font-semibold animate-pulse">
-                                TEMPO ESGOTADO!
+                            {isRodando && (
+                              <motion.span
+                                animate={{ opacity: [1, 0, 1] }}
+                                transition={{ duration: 1, repeat: Infinity }}
+                                className="text-xs text-[#00e676] font-semibold"
+                              >
+                                AO VIVO
+                              </motion.span>
+                            )}
+                            {isParado && (
+                              <span className="text-xs text-muted-foreground font-medium">
+                                NÃO INICIADO
+                              </span>
+                            )}
+                            {isPausado && (
+                              <span className="text-xs text-yellow-500 font-semibold">
+                                PAUSADO
                               </span>
                             )}
                           </div>
@@ -834,24 +825,24 @@ export default function AoVivoPage({ params }: Props) {
                           {/* Admin Timer Controls */}
                           {isAdmin && (
                             <div className="flex items-center gap-1">
-                              {!isTimerRunning && !isEsgotado && (
+                              {!isRodando && (
                                 <Button
                                   variant="ghost"
                                   size="icon"
                                   className="h-8 w-8"
-                                  onClick={handleIniciarTimer}
-                                  title="Iniciar timer"
+                                  onClick={handleIniciarCronometro}
+                                  title="Iniciar cronômetro"
                                 >
                                   <Play className="h-4 w-4 text-[#00e676]" />
                                 </Button>
                               )}
-                              {isTimerRunning && !isEsgotado && (
+                              {isRodando && (
                                 <Button
                                   variant="ghost"
                                   size="icon"
                                   className="h-8 w-8"
-                                  onClick={handlePausarTimer}
-                                  title="Pausar timer"
+                                  onClick={handlePausarCronometro}
+                                  title="Pausar cronômetro"
                                 >
                                   <TimerOff className="h-4 w-4 text-yellow-500" />
                                 </Button>
@@ -860,30 +851,13 @@ export default function AoVivoPage({ params }: Props) {
                                 variant="ghost"
                                 size="icon"
                                 className="h-8 w-8"
-                                onClick={handleResetarTimer}
-                                title="Resetar timer"
+                                onClick={handleResetarCronometro}
+                                title="Resetar cronômetro"
                               >
                                 <TimerReset className="h-4 w-4 text-muted-foreground" />
                               </Button>
                             </div>
                           )}
-                        </div>
-
-                        {/* Progress bar */}
-                        <div className="mt-2 w-full h-1.5 rounded-full bg-[#2a2a2a] overflow-hidden">
-                          <motion.div
-                            key={tempoInfo.progresso}
-                            initial={false}
-                            animate={{ width: `${Math.min(tempoInfo.progresso, 100)}%` }}
-                            transition={{ duration: 1, ease: "linear" }}
-                            className={`h-full rounded-full ${
-                              isAVencer
-                                ? "bg-red-500"
-                                : isTimerRunning
-                                ? "bg-[#00e676]"
-                                : "bg-muted-foreground/30"
-                            }`}
-                          />
                         </div>
                       </div>
                     )
