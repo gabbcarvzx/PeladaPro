@@ -405,18 +405,34 @@ async function main() {
   assert(confirmadosSorteio?.length === 25, "25 confirmados disponíveis para sorteio")
 
   if (confirmadosSorteio && confirmadosSorteio.length === 25) {
-    // Verifica que todos têm ordem_chegada única e sequencial
-    const ordens = confirmadosSorteio.map((c: unknown) => (c as { ordem_chegada: number }).ordem_chegada).sort((a: number, b: number) => a - b)
-    let ordensOK = true
-    for (let i = 0; i < ordens.length; i++) {
-      if (ordens[i] !== i + 1) {
-        ordensOK = false
-        console.error(`   ❌ Ordem sorteio quebrada na posição ${i}: valor=${ordens[i]}`)
+    // Verifica que todos têm ordem_chegada única e EM ORDEM CRESCENTE
+    // NOTA: ordem_chegada NÃO precisa ser sequencial após cancelamentos.
+    // Ex: se jogador 5 cancelou, as ordens serão [1,2,3,4,6,7,...,25,26]
+    // O sorteio usa hora_chegada como critério, não ordem_chegada.
+    const ordens = confirmadosSorteio.map((c: unknown) => (c as { ordem_chegada: number }).ordem_chegada)
+    const ordensSort = [...ordens].sort((a: number, b: number) => a - b)
+    
+    // Verifica 1: valores são crescentes
+    let ordensCrescentes = true
+    for (let i = 1; i < ordensSort.length; i++) {
+      if (ordensSort[i] <= ordensSort[i - 1]) {
+        ordensCrescentes = false
+        console.error(`   ❌ Ordem não crescente na posição ${i}: ${ordensSort[i-1]} -> ${ordensSort[i]}`)
         fail++
         break
       }
     }
-    if (ordensOK) assert(true, "Ordem de chegada sequencial (1 a 25) para sorteio")
+    if (ordensCrescentes) assert(true, "Ordens de chegada são crescentes")
+
+    // Verifica 2: sem duplicatas
+    const unicas = new Set(ordens)
+    if (unicas.size === ordens.length) {
+      assert(true, `Todas as ${ordens.length} ordens são únicas`)
+    } else {
+      assert(false, `Ordens duplicadas: ${ordens.length} valores, ${unicas.size} únicos`)
+    }
+
+    console.log(`   Ordens: [${ordensSort.join(", ")}]`)
   }
 
   // Registra sorteio no histórico

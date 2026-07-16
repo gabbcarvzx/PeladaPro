@@ -20,7 +20,7 @@ export class ConfrontoService {
   async iniciarConfrontos(peladaId: string, sorteioId: string, tempoLimite?: number, ocorrenciaId?: string): Promise<Confronto | null> {
     // Proteção: verifica se o admin tem permissão
     const permService = new PermissionService(this.supabase)
-    await permService.assertCanManagePelada(await this.getAdminId(peladaId), peladaId)
+    await permService.assertCanManagePelada(peladaId)
 
     // Busca o sorteio com os times
     const { data: sorteio } = await this.supabase
@@ -494,20 +494,6 @@ export class ConfrontoService {
   }
 
   /**
-   * Obtém o admin_id da pelada de um confronto
-   */
-  private async getAdminId(peladaId: string): Promise<string> {
-    const { data } = await this.supabase
-      .from("peladas")
-      .select("admin_id")
-      .eq("id", peladaId)
-      .single()
-
-    if (!data) throw new Error("Pelada não encontrada")
-    return (data as any).admin_id
-  }
-
-  /**
    * Verifica se o admin do confronto tem permissão de admin
    */
   private async verificarAdminPermissao(confrontoId: string): Promise<void> {
@@ -515,10 +501,7 @@ export class ConfrontoService {
     if (!confronto) throw new Error("Confronto não encontrado")
 
     const permService = new PermissionService(this.supabase)
-    await permService.assertCanManagePelada(
-      await this.getAdminId(confronto.pelada_id),
-      confronto.pelada_id,
-    )
+    await permService.assertCanManagePelada(confronto.pelada_id)
   }
 
   /**
@@ -622,7 +605,7 @@ export class ConfrontoService {
   async finalizarRodada(peladaId: string): Promise<void> {
     // Proteção: verifica se o admin tem permissão
     const permService = new PermissionService(this.supabase)
-    await permService.assertCanManagePelada(await this.getAdminId(peladaId), peladaId)
+    await permService.assertCanManagePelada(peladaId)
     await this.supabase
       .from("confrontos")
       .update({ status: "finalizado", resultado: "empate" })

@@ -71,6 +71,7 @@ export class PermissionService {
    * Equivalente ao antigo hasActiveSubscription.
    */
   async canCreatePelada(userId: string): Promise<boolean> {
+    const logTag = "[PERM-CAN-CREATE-PELADA]"
     try {
       const { data, error } = await this.supabase.rpc("can_create_pelada", {
         p_user_id: userId,
@@ -79,8 +80,12 @@ export class PermissionService {
       if (!error && data !== null) {
         return data === true
       }
-    } catch {
-      // Fallback: consulta direta na tabela
+
+      if (error) {
+        console.warn(`${logTag} RPC falhou: ${error.message}, usando fallback`)
+      }
+    } catch (e) {
+      console.warn(`${logTag} Exceção no RPC, usando fallback:`, e)
     }
 
     return this.isAdmin(userId)
@@ -91,6 +96,7 @@ export class PermissionService {
    * Equivalente ao antigo canManagePelada.
    */
   async canManagePelada(userId: string, peladaId: string): Promise<boolean> {
+    const logTag = "[PERM-CAN-MANAGE-PELADA]"
     try {
       const { data, error } = await this.supabase.rpc("can_manage_pelada", {
         p_user_id: userId,
@@ -100,11 +106,16 @@ export class PermissionService {
       if (!error && data !== null) {
         return data === true
       }
-    } catch {
-      // Fallback
+
+      if (error) {
+        console.warn(`${logTag} RPC falhou: ${error.message}, usando fallback`)
+      }
+    } catch (e) {
+      console.warn(`${logTag} Exceção no RPC, usando fallback:`, e)
     }
 
     // Fallback: verifica se é admin da pelada e tem role admin
+    console.warn(`${logTag} Usando fallback para userId=${userId}, peladaId=${peladaId}`)
     const { data: pelada } = await this.supabase
       .from("peladas")
       .select("admin_id")
@@ -112,8 +123,14 @@ export class PermissionService {
       .single()
 
     const p = pelada as { admin_id: string } | null
-    if (!p) return false
-    if (p.admin_id !== userId) return false
+    if (!p) {
+      console.warn(`${logTag} Pelada não encontrada`)
+      return false
+    }
+    if (p.admin_id !== userId) {
+      console.warn(`${logTag} Usuário ${userId} não é admin da pelada ${peladaId}`)
+      return false
+    }
 
     return this.isAdmin(userId)
   }
@@ -133,11 +150,18 @@ export class PermissionService {
   }
 
   /**
-   * Verifica se o usuário pode gerenciar uma pelada e lança erro se não puder.
+   * Verifica se o usuário AUTENTICADO pode gerenciar uma pelada e lança erro se não puder.
+   * Obtém o userId do client autenticado (bypassa problema de caller passar userId errado).
    * Usado para editar pelada, gerenciar participantes, confrontos, etc.
    */
-  async assertCanManagePelada(userId: string, peladaId: string): Promise<void> {
-    const allowed = await this.canManagePelada(userId, peladaId)
+  async assertCanManagePelada(peladaId: string): Promise<void> {
+    const { data: { user }, error: authError } = await this.supabase.auth.getUser()
+
+    if (authError || !user) {
+      throw new Error("Usuário não autenticado")
+    }
+
+    const allowed = await this.canManagePelada(user.id, peladaId)
     if (!allowed) {
       throw new Error(
         "Você não tem permissão para gerenciar esta pelada. " +

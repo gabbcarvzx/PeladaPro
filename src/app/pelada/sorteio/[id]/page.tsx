@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { motion, AnimatePresence } from "framer-motion"
@@ -43,7 +43,8 @@ interface Props {
 export default function SorteioPage({ params }: Props) {
   const router = useRouter()
   const { supabase, user, loading: authLoading } = useSupabase()
-  const peladaService = new PeladaService(supabase)
+  const peladaServiceRef = useRef(new PeladaService(supabase))
+  const peladaService = peladaServiceRef.current
   const [pelada, setPelada] = useState<Pelada | null>(null)
   const [peladaId, setPeladaId] = useState<string>("")
   const [loading, setLoading] = useState(true)
@@ -55,6 +56,13 @@ export default function SorteioPage({ params }: Props) {
   const [showResult, setShowResult] = useState(false)
   const [animating, setAnimating] = useState(false)
   const [ocorrenciaAtual, setOcorrenciaAtual] = useState<PeladaOcorrencia | null>(null)
+  const sorteandoRef = useRef(false)
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
 
   const isAdmin = user?.id === pelada?.admin_id
 
@@ -101,14 +109,26 @@ export default function SorteioPage({ params }: Props) {
     }
   }, [selectedDate])
 
-  const handleSortear = async () => {
+  const handleSortear = useCallback(async () => {
     if (!pelada || !isAdmin) return
+
+    // Previne múltiplos cliques (race condition)
+    if (sorteandoRef.current) {
+      console.log("[SORTEIO] Já está sorteando, ignorando clique duplicado")
+      return
+    }
+
+    sorteandoRef.current = true
     setAnimating(true)
     setSorteando(true)
     setShowResult(false)
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 2000))
+      // Pequeno delay para a animação do dado
+      await new Promise((resolve) => setTimeout(resolve, 800))
+
+      // Verifica se o componente ainda está montado (não desmontou durante a animação)
+      if (!mountedRef.current) return
 
       // Ordena por hora_chegada ASC (ordem de chegada)
       const sorted = [...confirmados].sort((a, b) => {
@@ -117,11 +137,17 @@ export default function SorteioPage({ params }: Props) {
         return new Date(a.hora_chegada).getTime() - new Date(b.hora_chegada).getTime()
       })
 
+      if (sorted.length === 0) {
+        throw new Error("Nenhum jogador com chegada confirmada para sortear")
+      }
+
       const jogadores = sorted.map((c) => ({
         user_id: c.user_id,
         nome: c.profile?.nome || "Jogador",
         avatar_url: c.profile?.avatar_url || null,
       }))
+
+      console.log(`[SORTEIO] Iniciando sorteio: ${jogadores.length} jogadores, ${pelada.numero_times} times, ${pelada.jogadores_por_time} por time`)
 
       const result = await peladaService.realizarSorteio(
         peladaId,
@@ -132,6 +158,7 @@ export default function SorteioPage({ params }: Props) {
       )
 
       if (result) {
+        console.log(`[SORTEIO] ✅ Sorteio realizado: ${result.times.length} times`)
         setTimesGerados(result.times)
         setShowResult(true)
         const h = await peladaService.getHistoricoSorteios(peladaId)
@@ -141,16 +168,18 @@ export default function SorteioPage({ params }: Props) {
         throw new Error("Resposta vazia do servidor")
       }
     } catch (error) {
+      console.error("[SORTEIO] Erro:", error)
       toast({
         title: "Erro ao realizar sorteio",
         description: error instanceof Error ? error.message : "Erro desconhecido",
         variant: "destructive",
       })
     } finally {
+      sorteandoRef.current = false
       setSorteando(false)
       setAnimating(false)
     }
-  }
+  }, [pelada, isAdmin, confirmados, peladaId, peladaService, ocorrenciaAtual])
 
   const dataAtual = new Date().toISOString().split("T")[0]
 

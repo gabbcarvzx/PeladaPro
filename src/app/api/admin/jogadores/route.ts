@@ -362,6 +362,15 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: check.error }, { status: check.status })
     }
 
+    // 🛡️ BLOQUEIA auto-remoção do admin da pelada
+    if (userId === user.id) {
+      console.warn(`${logTag} Admin tentou remover a si mesmo da pelada ${peladaId}`)
+      return NextResponse.json(
+        { error: "Você não pode remover a si mesmo da pelada. Transfira a administração primeiro." },
+        { status: 409 },
+      )
+    }
+
     const adminClient = getAdminClient()
     const hoje = new Date().toISOString().split("T")[0]
 

@@ -139,7 +139,7 @@ export class PeladaService {
       .eq("id", peladaId)
       .single()
     if (!pelada) return null
-    await permService.assertCanManagePelada((pelada as any).admin_id, peladaId)
+    await permService.assertCanManagePelada(peladaId)
 
     const { data } = await this.supabase
       .from("peladas")
@@ -177,15 +177,10 @@ export class PeladaService {
    */
   async adminPromoverDaFila(peladaId: string, userId: string, dataJogo: string): Promise<boolean> {
     const permService = new PermissionService(this.supabase)
-    const { data: pelada } = await this.supabase
-      .from("peladas")
-      .select("admin_id")
-      .eq("id", peladaId)
-      .single()
+    await permService.assertCanManagePelada(peladaId)
 
-    if (!pelada) return false
-    const adminId = (pelada as any).admin_id
-    await permService.assertCanManagePelada(adminId, peladaId)
+    const logTag = "[ADMIN-PROMOVER-FILA]"
+    console.log(`${logTag} Promovendo ${userId} na pelada ${peladaId} para ${dataJogo}`)
 
     // Remove da lista de espera
     const { error: deleteError } = await this.supabase
@@ -195,28 +190,46 @@ export class PeladaService {
       .eq("user_id", userId)
       .eq("data_jogo", dataJogo)
 
-    if (deleteError) return false
+    if (deleteError) {
+      console.error(`${logTag} Erro ao remover da fila:`, deleteError)
+      return false
+    }
+
+    // Busca a maior ordem_chegada atual
+    const { data: maxOrdem } = await this.supabase
+      .from("confirmacoes_dia")
+      .select("ordem_chegada")
+      .eq("pelada_id", peladaId)
+      .eq("data_jogo", dataJogo)
+      .order("ordem_chegada", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    // CORRIGIDO: usa operador ?? (nullish coalescing) em vez de ||
+    // e isola a soma para evitar problema de precedência
+    const ultimaOrdem = (maxOrdem as { ordem_chegada?: number } | null)?.ordem_chegada ?? 0
+    const novaOrdem = ultimaOrdem + 1
+
+    console.log(`${logTag} Última ordem=${ultimaOrdem}, nova ordem=${novaOrdem}`)
 
     // Atualiza confirmação para confirmado com hora_chegada
-    await this.supabase.from("confirmacoes_dia").upsert({
+    const { error: upsertError } = await this.supabase.from("confirmacoes_dia").upsert({
       pelada_id: peladaId,
       user_id: userId,
       data_jogo: dataJogo,
       status: "confirmado",
       hora_chegada: new Date().toISOString(),
-      ordem_chegada: (
-        await this.supabase
-          .from("confirmacoes_dia")
-          .select("ordem_chegada")
-          .eq("pelada_id", peladaId)
-          .eq("data_jogo", dataJogo)
-          .order("ordem_chegada", { ascending: false })
-          .limit(1)
-          .maybeSingle()
-      )?.data?.ordem_chegada || 0 + 1,
+      ordem_chegada: novaOrdem,
     }, {
       onConflict: "pelada_id, user_id, data_jogo",
     })
+
+    if (upsertError) {
+      console.error(`${logTag} Erro ao confirmar promoção:`, upsertError)
+      return false
+    }
+
+    console.log(`${logTag} ✅ ${userId} promovido com ordem ${novaOrdem}`)
 
     // Reordena fila
     const fila = await this.getFilaEspera(peladaId, dataJogo)
@@ -271,14 +284,7 @@ export class PeladaService {
    */
   async removeParticipante(peladaId: string, userId: string): Promise<void> {
     const permService = new PermissionService(this.supabase)
-    const { data: pelada } = await this.supabase
-      .from("peladas")
-      .select("admin_id")
-      .eq("id", peladaId)
-      .single()
-    if (pelada) {
-      await permService.assertCanManagePelada((pelada as any).admin_id, peladaId)
-    }
+    await permService.assertCanManagePelada(peladaId)
 
     await this.supabase
       .from("pelada_participantes")
@@ -292,14 +298,7 @@ export class PeladaService {
    */
   async alterarTipoJogador(peladaId: string, userId: string, tipo: string): Promise<void> {
     const permService = new PermissionService(this.supabase)
-    const { data: pelada } = await this.supabase
-      .from("peladas")
-      .select("admin_id")
-      .eq("id", peladaId)
-      .single()
-    if (pelada) {
-      await permService.assertCanManagePelada((pelada as any).admin_id, peladaId)
-    }
+    await permService.assertCanManagePelada(peladaId)
 
     await this.supabase
       .from("pelada_participantes")
@@ -493,15 +492,7 @@ export class PeladaService {
     ocorrenciaId?: string,
   ): Promise<HistoricoSorteio | null> {
     const permService = new PermissionService(this.supabase)
-    const { data: pelada } = await this.supabase
-      .from("peladas")
-      .select("admin_id")
-      .eq("id", peladaId)
-      .single()
-
-    if (!pelada) throw new Error("Pelada não encontrada")
-    const adminId = (pelada as any).admin_id
-    await permService.assertCanManagePelada(adminId, peladaId)
+    await permService.assertCanManagePelada(peladaId)
 
     const times = this.gerarTimes(participantes, numeroTimes, jogadoresPorTime)
 
@@ -522,13 +513,20 @@ export class PeladaService {
   /**
    * Algoritmo de geração de times baseado em ordem de chegada.
    * Os participantes já devem vir ordenados por hora_chegada ASC.
-   * Distribuição serpentina para balancear os times.
+   * Distribuição serpentina verdadeira para balancear os times:
+   * 
+   * Exemplo (4 times, 12 jogadores):
+   *   1→A, 2→B, 3→C, 4→D, 5→D, 6→C, 7→B, 8→A, 9→A, 10→B, ...
+   * 
+   * Isso garante que os times recebam jogadores fortes e fracos
+   * de forma alternada, balanceando o nível.
    */
   private gerarTimes(
     participantes: { user_id: string; nome: string; avatar_url: string | null }[],
     numeroTimes: number,
     jogadoresPorTime: number,
   ): { nome: string; jogadores: { user_id: string; nome: string; avatar_url: string | null }[] }[] {
+    const logTag = "[GERAR-TIMES]"
     const nomesTimes = [
       "Time Azul", "Time Vermelho", "Time Verde", "Time Amarelo",
       "Time Roxo", "Time Laranja", "Time Rosa", "Time Cinza",
@@ -543,17 +541,43 @@ export class PeladaService {
       })
     }
 
-    // Distribuição serpentina baseada na ordem de chegada
+    // Distribuição serpentina verdadeira:
+    // Na ida: 0, 1, 2, ..., N-1
+    // Na volta: N-1, N-2, ..., 0
     participantes.forEach((jogador, index) => {
-      const timeIndex = index % numeroTimes
+      const rodada = Math.floor(index / numeroTimes)
+      const posicaoNaRodada = index % numeroTimes
+      
+      // Se for rodada par: ordem crescente (0, 1, 2, ...)
+      // Se for rodada ímpar: ordem decrescente (N-1, N-2, ...)
+      const timeIndex = rodada % 2 === 0
+        ? posicaoNaRodada
+        : numeroTimes - 1 - posicaoNaRodada
+
       if (times[timeIndex].jogadores.length < jogadoresPorTime) {
         times[timeIndex].jogadores.push({
           user_id: jogador.user_id,
           nome: jogador.nome,
           avatar_url: jogador.avatar_url,
         })
+      } else {
+        // Se o time já está lotado (por configuração), aloca no próximo disponível
+        console.warn(`${logTag} Time ${times[timeIndex].nome} lotado, realocando ${jogador.nome}`)
+        for (let t = 0; t < numeroTimes; t++) {
+          const altIndex = (timeIndex + t + 1) % numeroTimes
+          if (times[altIndex].jogadores.length < jogadoresPorTime) {
+            times[altIndex].jogadores.push({
+              user_id: jogador.user_id,
+              nome: jogador.nome,
+              avatar_url: jogador.avatar_url,
+            })
+            break
+          }
+        }
       }
     })
+
+    console.log(`${logTag} Times gerados: ${times.map(t => `${t.nome}(${t.jogadores.length})`).join(", ")}`)
 
     return times
   }
