@@ -31,8 +31,13 @@ export class ConfrontoService {
 
     if (!sorteio) throw new Error("Sorteio não encontrado")
 
-    const times = (sorteio as unknown as HistoricoSorteio).times
-    if (!times || times.length < 2) throw new Error("São necessários pelo menos 2 times")
+    // 🛡️ Parseia times: registros antigos podem ter string no lugar de array
+    // (devido a double JSON.stringify que foi corrigido)
+    const timesRaw = (sorteio as unknown as HistoricoSorteio).times
+    const times = this.parseTimes(timesRaw)
+    if (times.length < 2) throw new Error("São necessários pelo menos 2 times")
+
+    console.log(`[CONFRONTO] Iniciando confrontos: ${times.length} times: ${times.map(t => t.nome).join(", ")}`)
 
     // Verifica se já existem confrontos ativos para esta pelada
     const { data: existentes } = await this.supabase
@@ -427,6 +432,28 @@ export class ConfrontoService {
       }
     }
     return null
+  }
+
+  /**
+   * Parseia o campo times do histórico, que pode vir como:
+   * - Array (formato correto após correção)
+   * - String (registros antigos com double JSON.stringify)
+   */
+  private parseTimes(times: unknown): { nome: string; jogadores: TimeSorteioJogador[] }[] {
+    if (Array.isArray(times)) return times as { nome: string; jogadores: TimeSorteioJogador[] }[]
+    if (typeof times === "string") {
+      try {
+        const parsed = JSON.parse(times)
+        if (Array.isArray(parsed)) return parsed as { nome: string; jogadores: TimeSorteioJogador[] }[]
+        console.warn("[CONFRONTO] parseTimes: parsed value is not array, retornando []")
+        return []
+      } catch {
+        console.error("[CONFRONTO] parseTimes: erro ao parsear string JSON, retornando []")
+        return []
+      }
+    }
+    console.warn("[CONFRONTO] parseTimes: tipo inesperado, retornando []")
+    return []
   }
 
   /**
