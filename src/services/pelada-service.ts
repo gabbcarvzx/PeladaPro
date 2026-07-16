@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
-import type { Pelada, PeladaOcorrencia, PeladaParticipante, ConfirmacaoDia, ListaEspera, HistoricoSorteio } from "@/types"
+import type { Pelada, PeladaOcorrencia, PeladaParticipante, ConfirmacaoDia, ListaEspera, HistoricoSorteio, TimeSorteio } from "@/types"
 import { PermissionService } from "./permission-service"
 
 export class PeladaService {
@@ -501,7 +501,7 @@ export class PeladaService {
       .insert({
         pelada_id: peladaId,
         modo: "ordem_chegada",
-        times: JSON.stringify(times),
+        times, // Array direto — supabase serializa como jsonb corretamente
         ...(ocorrenciaId ? { pelada_ocorrencia_id: ocorrenciaId } : {}),
       })
       .select()
@@ -592,7 +592,33 @@ export class PeladaService {
       .eq("pelada_id", peladaId)
       .order("created_at", { ascending: false })
 
-    return (data as HistoricoSorteio[]) || []
+    const historicos = (data as HistoricoSorteio[]) || []
+
+    // 🛡️ Corrige registros antigos que foram inseridos com JSON.stringify duplicado
+    // (times pode vir como string em vez de array)
+    return historicos.map((h) => ({
+      ...h,
+      times: this.parserTimes(h.times),
+    }))
+  }
+
+  /**
+   * Parseia o campo times do histórico, que pode vir como:
+   * - Array (formato correto após esta correção)
+   * - String (registros antigos com double JSON.stringify)
+   */
+  private parserTimes(times: unknown): TimeSorteio[] {
+    if (Array.isArray(times)) return times as TimeSorteio[]
+    if (typeof times === "string") {
+      try {
+        const parsed = JSON.parse(times)
+        return Array.isArray(parsed) ? (parsed as TimeSorteio[]) : []
+      } catch {
+        console.warn("[PARSER-TIMES] Erro ao parsear times string, retornando []")
+        return []
+      }
+    }
+    return []
   }
 
   // ==========================================

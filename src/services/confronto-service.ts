@@ -94,8 +94,8 @@ export class ConfrontoService {
       sorteio_id: sorteioId,
       time_a_nome: timeA.nome,
       time_b_nome: timeB.nome,
-      time_a_jogadores: JSON.stringify(timeA.jogadores),
-      time_b_jogadores: JSON.stringify(timeB.jogadores),
+      time_a_jogadores: timeA.jogadores, // Array direto — supabase serializa como jsonb
+      time_b_jogadores: timeB.jogadores,
       ordem,
       tempo_limite: tempoLimite || 600,
       ...(ocorrenciaId ? { pelada_ocorrencia_id: ocorrenciaId } : {}),

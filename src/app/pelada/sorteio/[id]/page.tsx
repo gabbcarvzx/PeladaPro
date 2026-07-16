@@ -158,8 +158,15 @@ export default function SorteioPage({ params }: Props) {
       )
 
       if (result) {
-        console.log(`[SORTEIO] ✅ Sorteio realizado: ${result.times.length} times`)
-        setTimesGerados(result.times)
+        // 🛡️ Parseia times (pode vir como array ou string de registros antigos)
+        const timesArray = Array.isArray(result.times)
+          ? result.times
+          : typeof result.times === "string"
+            ? (() => { try { return JSON.parse(result.times) } catch { return [] } })()
+            : []
+
+        console.log(`[SORTEIO] ✅ Sorteio realizado: ${timesArray.length} times`)
+        setTimesGerados(timesArray)
         setShowResult(true)
         const h = await peladaService.getHistoricoSorteios(peladaId)
         setHistorico(h)
