@@ -20,6 +20,7 @@ import { Logo } from "@/components/ui/logo"
 import { PageTransition, FadeIn } from "@/components/layout/motion-wrapper"
 import { toast } from "@/components/ui/toaster"
 import { PeladaService } from "@/services/pelada-service"
+import { ConfrontoService } from "@/services/confronto-service"
 import { CORES_TIMES } from "@/utils/constants"
 import {
   Loader2,
@@ -45,6 +46,8 @@ export default function SorteioPage({ params }: Props) {
   const { supabase, user, loading: authLoading } = useSupabase()
   const peladaServiceRef = useRef(new PeladaService(supabase))
   const peladaService = peladaServiceRef.current
+  const confrontoServiceRef = useRef(new ConfrontoService(supabase))
+  const confrontoService = confrontoServiceRef.current
   const [pelada, setPelada] = useState<Pelada | null>(null)
   const [peladaId, setPeladaId] = useState<string>("")
   const [loading, setLoading] = useState(true)
@@ -148,6 +151,18 @@ export default function SorteioPage({ params }: Props) {
       }))
 
       console.log(`[SORTEIO] Iniciando sorteio: ${jogadores.length} jogadores, ${pelada.numero_times} times, ${pelada.jogadores_por_time} por time`)
+
+      // 🔒 ANTES DE SORTEAR: limpa confrontos antigos (se houver)
+      // Garante que não fique estado misto entre sorteios
+      try {
+        const limpo = await confrontoService.limparEstadoConfrontos(peladaId, ocorrenciaAtual?.id)
+        if (limpo.removidoConfrontos > 0) {
+          console.log(`[SORTEIO] Estado anterior limpo: ${limpo.removidoConfrontos} confrontos removidos`)
+        }
+      } catch (cleanErr) {
+        console.warn("[SORTEIO] Aviso ao limpar estado anterior:", cleanErr)
+        // Não bloqueia o sorteio
+      }
 
       const result = await peladaService.realizarSorteio(
         peladaId,

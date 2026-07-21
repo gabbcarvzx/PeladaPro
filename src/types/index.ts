@@ -116,7 +116,8 @@ export interface Confronto {
   placar_b: number
   status: "em_andamento" | "finalizado"
   resultado: "time_a" | "time_b" | "empate" | null
-  fila_restante?: string
+  /** jsonb: array de times (registros novos) ou string (registros antigos). Usar parseFila() para ler. */
+  fila_restante?: unknown
   tempo_limite: number
   iniciado_em: string | null
   tempo_restante: number | null

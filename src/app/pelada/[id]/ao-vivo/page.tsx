@@ -32,6 +32,10 @@ import {
   Timer,
   TimerOff,
   TimerReset,
+  ArrowRight,
+  ChevronRight,
+  Shuffle,
+  Sparkles,
 } from "lucide-react"
 import type { Pelada, PeladaOcorrencia, Confronto, EventoConfronto, TimeSorteioJogador } from "@/types"
 
@@ -1089,6 +1093,151 @@ export default function AoVivoPage({ params }: Props) {
                     </div>
                   )}
                 </div>
+              </div>
+
+              {/* ========== PRÓXIMO TIME ========== */}
+              <div className="mb-8">
+                {(() => {
+                  const fila = (() => {
+                    const raw = confrontoAtual?.fila_restante
+                    if (Array.isArray(raw)) return raw as { nome: string; jogadores: TimeSorteioJogador[] }[]
+                    if (typeof raw === "string") { try { return JSON.parse(raw) } catch { return [] } }
+                    return []
+                  })()
+
+                  if (fila.length === 0) return null
+
+                  const isEmpateNotNext = fila.length >= 2
+
+                  return (
+                    <div className="rounded-2xl bg-gradient-to-br from-[#1a1a1a] to-[#121212] border border-[#2a2a2a] overflow-hidden">
+                      <div className="px-6 py-4 border-b border-[#2a2a2a]">
+                        <div className="flex items-center gap-2">
+                          <ArrowRight className="h-5 w-5 text-[#ffab00]" />
+                          <h3 className="text-base font-semibold text-[#fafafa]">
+                            {isEmpateNotNext ? "Próximos Times" : "Próximo Time"}
+                          </h3>
+                          <span className="text-xs text-muted-foreground ml-auto">
+                            {fila.length} time{fila.length !== 1 ? "s" : ""} na fila
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="p-5">
+                        {fila.length >= 2 ? (
+                          /* Empate scenario: show next 2 teams */
+                          <div className="flex flex-col sm:flex-row items-stretch gap-4">
+                            {/* Next Team 1 */}
+                            <div className="flex-1 relative">
+                              <div className="absolute -top-2 -left-2 z-10">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#ffab00]/10 text-[#ffab00] text-[10px] font-bold border border-[#ffab00]/30">
+                                  PRÓXIMO
+                                </span>
+                              </div>
+                              <div className="rounded-xl bg-[#121212] border border-[#ffab00]/30 p-4 h-full">
+                                <h4 className="text-sm font-bold text-[#fafafa] mb-3 flex items-center gap-2">
+                                  {fila[0].nome}
+                                </h4>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {fila[0].jogadores.map((j: TimeSorteioJogador) => (
+                                    <span
+                                      key={j.user_id}
+                                      className="text-xs bg-[#1a1a1a] px-2 py-1 rounded-md border border-[#2a2a2a]"
+                                    >
+                                      {j.nome}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-center">
+                              <ChevronRight className="h-6 w-6 text-muted-foreground hidden sm:block" />
+                              <span className="text-lg font-bold text-muted-foreground sm:hidden">×</span>
+                            </div>
+
+                            {/* Next Team 2 */}
+                            <div className="flex-1 relative">
+                              <div className="absolute -top-2 -left-2 z-10">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#00e676]/10 text-[#00e676] text-[10px] font-bold border border-[#00e676]/30">
+                                  PRÓXIMO
+                                </span>
+                              </div>
+                              <div className="rounded-xl bg-[#121212] border border-[#00e676]/30 p-4 h-full">
+                                <h4 className="text-sm font-bold text-[#fafafa] mb-3 flex items-center gap-2">
+                                  {fila[1].nome}
+                                </h4>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {fila[1].jogadores.map((j: TimeSorteioJogador) => (
+                                    <span
+                                      key={j.user_id}
+                                      className="text-xs bg-[#1a1a1a] px-2 py-1 rounded-md border border-[#2a2a2a]"
+                                    >
+                                      {j.nome}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          /* Single next team */
+                          <div className="relative">
+                            <div className="absolute -top-2 -left-2 z-10">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#ffab00]/10 text-[#ffab00] text-[10px] font-bold border border-[#ffab00]/30">
+                                ⏭ PRÓXIMO
+                              </span>
+                            </div>
+                            <div className="rounded-xl bg-[#121212] border border-[#ffab00]/30 p-4">
+                              <div className="flex items-center gap-3 mb-3">
+                                <div className="flex-1">
+                                  <h4 className="text-sm font-bold text-[#fafafa]">
+                                    {fila[0].nome}
+                                  </h4>
+                                  <p className="text-[10px] text-muted-foreground">
+                                    Aguardando na fila
+                                  </p>
+                                </div>
+                                <div className="text-right">
+                                  <span className="text-xs font-mono text-[#ffab00] bg-[#ffab00]/5 px-2 py-0.5 rounded-full">
+                                    Posição 1
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="flex flex-wrap gap-1.5">
+                                {fila[0].jogadores.map((j: TimeSorteioJogador) => (
+                                  <span
+                                    key={j.user_id}
+                                    className="text-xs bg-[#1a1a1a] px-2 py-1 rounded-md border border-[#2a2a2a] hover:border-[#ffab00]/20 transition-colors"
+                                  >
+                                    {j.nome}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Queue Status Bar */}
+                        {fila.length > 2 && (
+                          <div className="mt-4 pt-3 border-t border-[#2a2a2a] flex items-center gap-2 text-xs text-muted-foreground">
+                            <Shuffle className="h-3.5 w-3.5" />
+                            <span>
+                              +{fila.length - 2} time{fila.length - 2 !== 1 ? "s" : ""} restante{fila.length - 2 !== 1 ? "s" : ""} na fila
+                            </span>
+                            <span className="ml-auto">
+                              {fila.map((t: any, i: number) => (
+                                <span key={i} className="mr-1">
+                                  {t.nome}{i < fila.length - 1 ? " → " : ""}
+                                </span>
+                              ))}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })()}
               </div>
 
               {/* Eventos ao Vivo */}

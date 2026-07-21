@@ -340,17 +340,20 @@ export class ConfrontoService {
   }
 
   // ==========================================
-  // FINALIZAR CONFRONTO
+  // FINALIZAR CONFRONTO (TRANSACTIONAL via RPC)
+  // ==========================================
+  //
+  // A lógica de rotação roda em Node.js (onde é mais fácil de manter),
+  // mas a finalização + inserção do próximo confronto é EXECUTADA
+  // DENTRO DE UM RPC PostgreSQL com FOR UPDATE lock, garantindo
+  // atomicidade: ou ambos acontecem, ou nenhum.
+  //
+  // Regras:
+  // - Se vencedor: vencedor permanece, perdedor sai, próximo da fila entra
+  // - Se empate: ambos saem, entram os dois próximos da fila
+  // - Se fila acabar: encerra rodada (não cria próximo)
   // ==========================================
 
-  /**
-   * Finaliza o confronto atual e gera o próximo automaticamente.
-   *
-   * Regras:
-   * - Se vencedor: vencedor permanece, perdedor sai, próximo da fila entra
-   * - Se empate: ambos saem, entram os dois próximos da fila
-   * - Se fila acabar: reinicia a ordem original
-   */
   async finalizarConfronto(
     confrontoId: string,
     resultado: "time_a" | "time_b" | "empate",
@@ -365,21 +368,8 @@ export class ConfrontoService {
     if (!confronto) throw new Error("Confronto não encontrado")
     if (confronto.status !== "em_andamento") throw new Error("Confronto já finalizado")
 
-    // Finaliza o confronto atual
-    const { data: finalizado } = await this.supabase
-      .from("confrontos")
-      .update({
-        status: "finalizado",
-        resultado,
-      })
-      .eq("id", confrontoId)
-      .select()
-      .single()
-
-    if (!finalizado) throw new Error("Erro ao finalizar confronto")
-
     // ==========================================
-    // LÓGICA DE ROTAÇÃO CIRCULAR
+    // LÓGICA DE ROTAÇÃO CIRCULAR (Node.js)
     // ==========================================
     //
     // Exemplo com 5 times [A, B, C, D, E]:
@@ -394,20 +384,19 @@ export class ConfrontoService {
     //   Ambos saem, C e D entram
     //   A e B vão para o FINAL da fila
     //   Nova fila: [E, A, B]
+    //
+    // 🛡️ Se fila vazia → encerra rodada (sem próximo confronto)
+    //    Evita ciclo infinito de mesmos times.
     // ==========================================
 
     const filaRestante = this.parseFila(confronto)
-    const tempoLimite = confronto.tempo_limite
-    const ocorrenciaId = confronto.pelada_ocorrencia_id ?? undefined
 
     console.log(`${logTag} Fila atual: [${filaRestante.map(t => t.nome).join(", ")}]`)
 
-    let proximoConfronto: Confronto | null = null
+    // Prepara dados do próximo confronto (se houver)
+    let proximoData: Record<string, unknown> | null = null
 
     if (resultado === "empate") {
-      // ==========================================
-      // REGRA DE EMPATE: ambos saem, próximos 2 da fila entram
-      // ==========================================
       const timeA = {
         nome: confronto.time_a_nome,
         jogadores: this.parseJogadores(confronto.time_a_jogadores),
@@ -418,60 +407,39 @@ export class ConfrontoService {
       }
 
       if (filaRestante.length >= 2) {
-        // Próximos 2 da fila entram
         const entrantes = filaRestante.slice(0, 2)
-        // Restante da fila + times que empataram vão para o FINAL
         const novaFila = [...filaRestante.slice(2), timeA, timeB]
 
         console.log(`${logTag} EMPATE: ${timeA.nome} e ${timeB.nome} saem, ${entrantes[0].nome} vs ${entrantes[1].nome}`)
         console.log(`${logTag} Nova fila: [${novaFila.map(t => t.nome).join(", ")}]`)
 
-        proximoConfronto = await this.criarConfronto(
-          confronto.pelada_id,
-          confronto.sorteio_id!,
-          entrantes[0],
-          entrantes[1],
-          confronto.ordem + 1,
-          novaFila, // Array direto — coluna é jsonb
-          tempoLimite,
-          ocorrenciaId,
-        )
+        proximoData = {
+          time_a_nome: entrantes[0].nome,
+          time_b_nome: entrantes[1].nome,
+          time_a_jogadores: entrantes[0].jogadores,
+          time_b_jogadores: entrantes[1].jogadores,
+          fila_restante: novaFila,
+          ordem: confronto.ordem + 1,
+        }
       } else if (filaRestante.length === 1) {
-        // Só 1 time na fila — ele enfrenta time A, time B vai pro final
         const entrante = filaRestante[0]
         const novaFila = [timeB]
 
         console.log(`${logTag} EMPATE (fila=1): ${timeA.nome} vs ${entrante.nome}, fila: [${novaFila.map(t => t.nome).join(", ")}]`)
 
-        proximoConfronto = await this.criarConfronto(
-          confronto.pelada_id,
-          confronto.sorteio_id!,
-          timeA,
-          entrante,
-          confronto.ordem + 1,
-          novaFila, // Array direto — coluna é jsonb
-          tempoLimite,
-          ocorrenciaId,
-        )
+        proximoData = {
+          time_a_nome: timeA.nome,
+          time_b_nome: entrante.nome,
+          time_a_jogadores: timeA.jogadores,
+          time_b_jogadores: entrante.jogadores,
+          fila_restante: novaFila,
+          ordem: confronto.ordem + 1,
+        }
       } else {
-        // Fila vazia — reinicia com os times que empataram
-        console.log(`${logTag} EMPATE (fila vazia): ${timeA.nome} vs ${timeB.nome} (reinicio)`)
-
-        proximoConfronto = await this.criarConfronto(
-          confronto.pelada_id,
-          confronto.sorteio_id!,
-          timeA,
-          timeB,
-          confronto.ordem + 1,
-          undefined, // fila vazia
-          tempoLimite,
-          ocorrenciaId,
-        )
+        // 🛡️ FILA VAZIA: encerra rodada
+        console.log(`${logTag} EMPATE (fila vazia): encerrando rodada`)
       }
     } else {
-      // ==========================================
-      // REGRA DE VITÓRIA: vencedor fica, perdedor vai pro final, próximo da fila entra
-      // ==========================================
       const vencedor = this.getVencedor(confronto, resultado)!
       const perdedorNome = resultado === "time_a" ? confronto.time_b_nome : confronto.time_a_nome
       const perdedor = {
@@ -482,42 +450,65 @@ export class ConfrontoService {
       }
 
       if (filaRestante.length >= 1) {
-        // Próximo da fila entra, perdedor vai pro final
         const entrante = filaRestante[0]
         const novaFila = [...filaRestante.slice(1), perdedor]
 
         console.log(`${logTag} VITÓRIA: ${vencedor.nome} vence, ${perdedor.nome} vai pro final, ${entrante.nome} entra`)
         console.log(`${logTag} Nova fila: [${novaFila.map(t => t.nome).join(", ")}]`)
 
-        proximoConfronto = await this.criarConfronto(
-          confronto.pelada_id,
-          confronto.sorteio_id!,
-          vencedor,
-          entrante,
-          confronto.ordem + 1,
-          novaFila, // Array direto — coluna é jsonb
-          tempoLimite,
-          ocorrenciaId,
-        )
+        proximoData = {
+          time_a_nome: vencedor.nome,
+          time_b_nome: entrante.nome,
+          time_a_jogadores: vencedor.jogadores,
+          time_b_jogadores: entrante.jogadores,
+          fila_restante: novaFila,
+          ordem: confronto.ordem + 1,
+        }
       } else {
-        // Fila vazia — vencedor enfrenta perdedor de novo
-        console.log(`${logTag} VITÓRIA (fila vazia): ${vencedor.nome} vs ${perdedor.nome} (reinicio)`)
-
-        proximoConfronto = await this.criarConfronto(
-          confronto.pelada_id,
-          confronto.sorteio_id!,
-          vencedor,
-          perdedor,
-          confronto.ordem + 1,
-          undefined, // fila vazia
-          tempoLimite,
-          ocorrenciaId,
-        )
+        // 🛡️ FILA VAZIA: encerra rodada
+        console.log(`${logTag} VITÓRIA (fila vazia): encerrando rodada`)
       }
     }
 
+    // ==========================================
+    // CHAMA RPC TRANSACTIONAL
+    // finalizar_confronto faz TUDO em uma transação:
+    //   1. FOR UPDATE lock no confronto
+    //   2. UPDATE status='finalizado'
+    //   3. INSERT do próximo confronto (se houver)
+    // ==========================================
+    const { data: rpcResult, error: rpcError } = await this.supabase.rpc(
+      "finalizar_confronto",
+      {
+        p_confronto_id: confrontoId,
+        p_resultado: resultado,
+        p_proximo_jsonb: proximoData as Record<string, unknown> | null,
+      },
+    )
+
+    if (rpcError) {
+      console.error(`${logTag} Erro no RPC finalizar_confronto:`, rpcError)
+      throw new Error(`Erro ao finalizar confronto: ${rpcError.message}`)
+    }
+
+    const result = rpcResult as { finalizado_id?: string; proximo_id?: string | null; error?: string }
+
+    if (result.error) {
+      console.error(`${logTag} Erro retornado pelo RPC:`, result.error)
+      throw new Error(result.error)
+    }
+
+    console.log(`${logTag} ✅ RPC ok: finalizado=${result.finalizado_id}, proximo=${result.proximo_id || "(encerrada)"}`)
+
+    // Recarrega os confrontos finais do banco
+    const confrontoFinalizado = await this.getConfrontoById(confrontoId)
+    let proximoConfronto: Confronto | null = null
+    if (result.proximo_id) {
+      proximoConfronto = await this.getConfrontoById(result.proximo_id)
+    }
+
     return {
-      confrontoFinalizado: finalizado as Confronto,
+      confrontoFinalizado: confrontoFinalizado as Confronto,
       proximoConfronto,
     }
   }
@@ -750,6 +741,40 @@ export class ConfrontoService {
     }
 
     return 0
+  }
+
+  // ==========================================
+  // LIMPAR ESTADO (para refazer sorteio)
+  // ==========================================
+
+  /**
+   * Limpa todos os confrontos e eventos de uma pelada,
+   * garantindo estado limpo antes de refazer o sorteio.
+   * Usa RPC transactional no banco.
+   */
+  async limparEstadoConfrontos(peladaId: string, ocorrenciaId?: string): Promise<{ removidoEventos: number; removidoConfrontos: number }> {
+    const logTag = "[LIMPAR-ESTADO]"
+    console.log(`${logTag} peladaId=${peladaId}, ocorrenciaId=${ocorrenciaId}`)
+
+    const { data, error } = await this.supabase.rpc("limpar_estado_confrontos", {
+      p_pelada_id: peladaId,
+      p_ocorrencia_id: ocorrenciaId || null,
+    })
+
+    if (error) {
+      console.error(`${logTag} Erro:`, error)
+      throw new Error(`Erro ao limpar estado: ${error.message}`)
+    }
+
+    const result = data as { removido_eventos?: number; removido_confrontos?: number; error?: string }
+    if (result.error) throw new Error(result.error)
+
+    console.log(`${logTag} ✅ ${result.removido_confrontos} confrontos e ${result.removido_eventos} eventos removidos`)
+
+    return {
+      removidoEventos: result.removido_eventos || 0,
+      removidoConfrontos: result.removido_confrontos || 0,
+    }
   }
 
   /**

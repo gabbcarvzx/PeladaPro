@@ -46,9 +46,12 @@ import {
   Plus,
   Pencil,
   Zap,
+  Trophy,
+  Sparkles,
 } from "lucide-react"
 import type { Pelada, PeladaOcorrencia, PeladaParticipante, ConfirmacaoDia, ListaEspera } from "@/types"
 import { BadgeStatus } from "@/components/ui/badge-status"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 interface Props {
   params: Promise<{ id: string }>
@@ -381,6 +384,34 @@ export default function PeladaDetailPage({ params }: Props) {
           </div>
         </div>
       </header>
+
+      {/* Tab Navigation */}
+      <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 pt-4">
+        <Tabs value="info" onValueChange={(value) => {
+          if (value === "times") router.push(`/pelada/${peladaId}/times`)
+          else if (value === "sorteio") router.push(`/pelada/sorteio/${peladaId}`)
+          else if (value === "ao-vivo") router.push(`/pelada/${peladaId}/ao-vivo`)
+        }}>
+          <TabsList className="w-full justify-start bg-[#1a1a1a] border border-[#2a2a2a] p-1 rounded-xl overflow-x-auto">
+            <TabsTrigger value="info" className="flex items-center gap-2 data-[state=active]:bg-[#2a2a2a]">
+              <Users className="h-4 w-4" />
+              <span className="hidden sm:inline">Informações</span>
+            </TabsTrigger>
+            <TabsTrigger value="times" className="flex items-center gap-2 data-[state=active]:bg-[#2a2a2a]">
+              <Trophy className="h-4 w-4" />
+              <span className="hidden sm:inline">Times Sorteados</span>
+            </TabsTrigger>
+            <TabsTrigger value="sorteio" className="flex items-center gap-2 data-[state=active]:bg-[#2a2a2a]">
+              <Shuffle className="h-4 w-4" />
+              <span className="hidden sm:inline">Sorteio</span>
+            </TabsTrigger>
+            <TabsTrigger value="ao-vivo" className="flex items-center gap-2 data-[state=active]:bg-[#2a2a2a]">
+              <Sparkles className="h-4 w-4" />
+              <span className="hidden sm:inline">Ao Vivo</span>
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <PageTransition>
